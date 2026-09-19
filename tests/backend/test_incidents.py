@@ -19,6 +19,7 @@ def test_investigator_replays_response_items_without_output_status() -> None:
             "call_id": "call_123",
             "name": "host_get_metrics",
             "arguments": "{}",
+            "parsed_arguments": {},
         },
         {
             "id": "rs_123",

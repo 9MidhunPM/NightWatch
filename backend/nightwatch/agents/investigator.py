@@ -200,22 +200,31 @@ class InvestigatorService:
     def _replay_output(output: object) -> list[dict[str, object]]:
         """Convert response-only output items into valid follow-up input items.
 
-        The Responses API returns a top-level ``status`` on output items, but
-        rejects that field when the same items are supplied as the next input.
+        The SDK adds response-only fields such as ``status`` and
+        ``parsed_arguments`` that the API rejects when supplied as new input.
         Reasoning and function-call items still need to be replayed so the model
         can continue the tool loop with the corresponding call output.
         """
         if not isinstance(output, list):
             return []
+        input_fields = {
+            "function_call": {"type", "id", "call_id", "name", "arguments"},
+            "reasoning": {"type", "id", "summary", "content", "encrypted_content"},
+            "message": {"type", "id", "role", "content"},
+        }
         replay: list[dict[str, object]] = []
         for item in output:
             if not isinstance(item, dict):
                 continue
+            item_type = item.get("type")
+            if not isinstance(item_type, str) or item_type not in input_fields:
+                continue
+            allowed = input_fields[item_type]
             replay.append(
                 {
                     str(key): value
                     for key, value in item.items()
-                    if key != "status" and value is not None
+                    if key in allowed and value is not None
                 }
             )
         return replay
