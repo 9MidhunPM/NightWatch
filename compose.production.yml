@@ -2,6 +2,7 @@ services:
   nightwatch-backend:
     build:
       context: .
+      dockerfile: backend/Dockerfile
     environment:
       NW_ENVIRONMENT: production
       NW_DATABASE_URL: sqlite+aiosqlite:////var/lib/nightwatch/nightwatch.db

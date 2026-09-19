@@ -15,17 +15,22 @@ jobs:
         with:
           python-version: '3.12'
       - run: uv sync --extra dev
-      - run: uv run ruff check .
+        working-directory: backend
+      - run: uv run ruff check nightwatch ../tests
+        working-directory: backend
       - run: uv run mypy nightwatch
-      - run: uv run pytest tests tests/backend
+        working-directory: backend
+      - run: uv run pytest ../tests ../tests/backend
+        working-directory: backend
       - run: |
           db_path=$(mktemp /tmp/nightwatch-migration-XXXXXX.db)
           NW_DATABASE_URL="sqlite+aiosqlite:///$db_path" uv run alembic upgrade head
           test -s "$db_path"
+        working-directory: backend
       - run: |
           NW_CORS_ORIGINS=https://frontend.example.test \
           NW_WEBSOCKET_ORIGINS=https://frontend.example.test \
           NW_FRONTEND_TOKEN=abcdefghijklmnopqrstuvwxyz123456 \
           NW_OPERATOR_TOKEN=abcdefghijklmnopqrstuvwxyz654321 \
           docker compose -f compose.production.yml config
-      - run: docker build --tag nightwatch-backend:test .
+      - run: docker build --file backend/Dockerfile --tag nightwatch-backend:test .

@@ -6,6 +6,6 @@
 .ruff_cache
 .mypy_cache
 __pycache__
-data
+backend/data
 *.db
 *.log
