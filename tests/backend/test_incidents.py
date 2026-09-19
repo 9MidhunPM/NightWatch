@@ -1,4 +1,6 @@
+import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -76,3 +78,30 @@ async def test_missing_provider_keeps_incident_visible_for_human_review(tmp_path
     assert current.state == "HUMAN_REQUIRED"
     assert any(item.event_type == "INVESTIGATION_FAILED" for item in current.timeline)
     await engine.dispose()
+
+
+def test_investigator_preserves_the_sdk_computed_output_text() -> None:
+    class Response:
+        output_text = '{"status":"INSUFFICIENT_EVIDENCE","summary":"Evidence is incomplete.","hypotheses":[],"recommended_next_step":"Collect a route observation."}'
+
+        def model_dump(self) -> dict[str, object]:
+            return {"output": []}
+
+    class Responses:
+        async def create(self, **_kwargs: object) -> Response:
+            return Response()
+
+    async def exercise() -> None:
+        investigator = InvestigatorService(
+            cast(IncidentService, None),
+            cast(InvestigationToolRegistry, None),
+            api_key=None,
+            model="gpt-5.6-luna",
+            max_tool_calls=1,
+            timeout_seconds=1,
+        )
+        investigator._client = SimpleNamespace(responses=Responses())  # type: ignore[assignment]
+        payload = await investigator._response([])
+        assert payload["output_text"] == Response.output_text
+
+    asyncio.run(exercise())

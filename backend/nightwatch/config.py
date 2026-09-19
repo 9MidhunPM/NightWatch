@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     monitor_interval_seconds: float = Field(default=10.0, ge=2, le=300)
     monitor_failure_threshold: int = Field(default=3, ge=1, le=20)
     monitor_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    deployment_verify_attempts: int = Field(default=3, ge=1, le=10)
+    deployment_verify_retry_seconds: float = Field(default=2.0, ge=0, le=30)
     beszel_url: str | None = None
     beszel_system_id: str | None = None
     beszel_email: str | None = None

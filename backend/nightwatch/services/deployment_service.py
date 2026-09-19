@@ -38,6 +38,8 @@ class DeploymentService:
         secret_catalog: str | None,
         app_server_enabled: bool,
         github_read_token: str | None = None,
+        verification_attempts: int = 3,
+        verification_retry_seconds: float = 2.0,
     ) -> None:
         self._sessions = sessions
         self._dokploy = dokploy
@@ -47,6 +49,8 @@ class DeploymentService:
         self._policy = PolicyEngine()
         self._execution_lock = asyncio.Lock()
         self._secret_catalog = self._parse_secret_catalog(secret_catalog)
+        self._verification_attempts = verification_attempts
+        self._verification_retry_seconds = verification_retry_seconds
 
     async def validated_status(self) -> DeploymentStatusResponse:
         if not self._dokploy.configured:
@@ -372,11 +376,11 @@ class DeploymentService:
                 query = query.where(ProjectPlan.conversation_id == conversation_id)
             return [self._project_plan_response(item) for item in (await session.scalars(query)).all()]
 
-    async def _execute_project_plan(self, plan_id: str) -> None:
+    async def _execute_project_plan(self, plan_id: str, *, resume: bool = False) -> None:
         async with self._execution_lock:
             async with self._sessions() as session:
                 plan = await session.get(ProjectPlan, plan_id)
-                if plan is None or plan.status != "APPROVED":
+                if plan is None or (plan.status != "APPROVED" and not (resume and plan.status == "RUNNING")):
                     return
                 plan.status = "RUNNING"
                 await session.commit()
@@ -486,17 +490,68 @@ class DeploymentService:
             asyncio.create_task(self.execute(plan_id), name=f"nightwatch-deploy-{plan_id}")
         return response
 
-    async def execute(self, plan_id: str) -> None:
+    async def recover_incomplete_plans(self) -> int:
+        """Resume only persisted, approval-backed work after a control-plane restart."""
+        async with self._sessions() as session:
+            project_plans = list(
+                (await session.scalars(select(ProjectPlan).where(ProjectPlan.status.in_(("APPROVED", "RUNNING")))))
+                .all()
+            )
+            deployments = list(
+                (
+                    await session.scalars(
+                        select(DeploymentPlan).where(
+                            DeploymentPlan.status.in_(("APPROVED", "RUNNING", "VERIFYING"))
+                        )
+                    )
+                ).all()
+            )
+        tasks: list[asyncio.Task[None]] = []
+        for project_plan in project_plans:
+            tasks.append(
+                asyncio.create_task(
+                    self._execute_project_plan(
+                        project_plan.id, resume=project_plan.status == "RUNNING"
+                    ),
+                    name=f"nightwatch-recover-project-{project_plan.id}",
+                )
+            )
+        for deployment_plan in deployments:
+            if deployment_plan.status == "VERIFYING":
+                tasks.append(
+                    asyncio.create_task(
+                        self._verify(deployment_plan.id, deployment_plan.domain),
+                        name=f"nightwatch-recover-verify-{deployment_plan.id}",
+                    )
+                )
+            else:
+                tasks.append(
+                    asyncio.create_task(
+                        self.execute(
+                            deployment_plan.id, resume=deployment_plan.status == "RUNNING"
+                        ),
+                        name=f"nightwatch-recover-deploy-{deployment_plan.id}",
+                    )
+                )
+        if tasks:
+            await asyncio.gather(*tasks)
+        return len(tasks)
+
+    async def execute(self, plan_id: str, *, resume: bool = False) -> None:
         async with self._execution_lock:
             async with self._sessions() as session:
                 plan = await session.get(DeploymentPlan, plan_id)
-                if plan is None or plan.status != "APPROVED":
+                if plan is None or (plan.status != "APPROVED" and not (resume and plan.status == "RUNNING")):
                     return
                 existing = await session.scalar(select(DeploymentExecution).where(DeploymentExecution.deployment_plan_id == plan.id))
-                if existing is not None:
+                if existing is not None and not resume:
                     return
-                execution = DeploymentExecution(deployment_plan_id=plan.id, status="RUNNING", detail="Reconciling Dokploy project and service.")
-                session.add(execution)
+                if existing is None:
+                    execution = DeploymentExecution(deployment_plan_id=plan.id, status="RUNNING", detail="Reconciling Dokploy project and service.")
+                    session.add(execution)
+                else:
+                    existing.status = "RUNNING"
+                    existing.detail = "Resuming persisted Dokploy deployment reconciliation."
                 plan.status = "RUNNING"
                 await session.commit()
             try:
@@ -550,15 +605,37 @@ class DeploymentService:
         if not domain:
             await self._complete(plan_id, "VERIFYING", "No domain was selected; verify the application from Dokploy.")
             return
-        try:
-            async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
-                response = await client.get(f"https://{domain}")
-            if 200 <= response.status_code < 500:
-                await self._complete(plan_id, "VERIFIED", f"HTTPS endpoint returned HTTP {response.status_code}.")
-                return
-            await self._complete(plan_id, "VERIFYING", f"HTTPS endpoint returned HTTP {response.status_code}; inspect Dokploy logs.")
-        except httpx.HTTPError:
-            await self._complete(plan_id, "VERIFYING", "HTTPS endpoint is not reachable yet; inspect Dokploy logs and retry verification.")
+        detail = "HTTPS endpoint is not reachable yet."
+        for attempt in range(1, self._verification_attempts + 1):
+            try:
+                status_code = await self._probe_domain(domain)
+                if self._is_healthy_status(status_code):
+                    await self._complete(
+                        plan_id,
+                        "VERIFIED",
+                        f"HTTPS endpoint returned healthy HTTP {status_code} on verification attempt {attempt}.",
+                    )
+                    return
+                detail = f"HTTPS endpoint returned HTTP {status_code}, which is not a healthy deployment response."
+            except httpx.HTTPError:
+                detail = "HTTPS endpoint is not reachable yet."
+            if attempt < self._verification_attempts:
+                await asyncio.sleep(self._verification_retry_seconds)
+        await self._complete(
+            plan_id,
+            "VERIFYING",
+            f"{detail} Verify the intended application in Dokploy, then retry verification.",
+        )
+
+    @staticmethod
+    async def _probe_domain(domain: str) -> int:
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+            response = await client.get(f"https://{domain}")
+        return response.status_code
+
+    @staticmethod
+    def _is_healthy_status(status_code: int) -> bool:
+        return 200 <= status_code < 400
 
     async def _complete(self, plan_id: str, status: str, detail: str, project_id: str | None = None, environment_id: str | None = None, application_id: str | None = None) -> None:
         async with self._sessions() as session:

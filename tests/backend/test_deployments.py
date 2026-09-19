@@ -47,6 +47,13 @@ def test_dokploy_actions_are_explicitly_approval_gated() -> None:
     assert policy.evaluate("DOKPLOY_DELETE_PROJECT", protected=False).decision == PolicyDecision.DENY
 
 
+def test_deployment_health_accepts_only_success_or_redirect_responses() -> None:
+    assert DeploymentService._is_healthy_status(200)
+    assert DeploymentService._is_healthy_status(302)
+    assert not DeploymentService._is_healthy_status(404)
+    assert not DeploymentService._is_healthy_status(503)
+
+
 class _AmbiguousCreateDokploy:
     """Simulates Dokploy committing writes before returning an unusable body."""
 

@@ -47,6 +47,7 @@ def test_streamed_agent_message_delta_is_retained_until_turn_completion() -> Non
         server = CodexAppServer("codex", "test-key", timeout_seconds=5)
         stream = asyncio.StreamReader()
         server._process = Process(stream)  # type: ignore[assignment]
+        server._active_thread_id = "thread"
         server._turn_waiter = asyncio.get_running_loop().create_future()
         stream.feed_data(b'{"method":"item/agentMessage/delta","params":{"threadId":"thread","turnId":"turn","itemId":"message","delta":"Verified answer"}}\n')
         stream.feed_data(b'{"method":"turn/completed","params":{"turn":{"status":"completed"}}}\n')
@@ -96,6 +97,7 @@ def test_turn_completion_uses_the_final_agent_message_in_turn_items() -> None:
         server = CodexAppServer("codex", "test-key", timeout_seconds=5)
         stream = asyncio.StreamReader()
         server._process = Process(stream)  # type: ignore[assignment]
+        server._active_thread_id = "thread"
         server._turn_waiter = asyncio.get_running_loop().create_future()
         stream.feed_data(b'{"method":"turn/completed","params":{"threadId":"thread","turn":{"id":"turn","status":"completed","items":[{"id":"message","type":"agentMessage","text":"Final verified answer"}]}}}\n')
         stream.feed_eof()
@@ -103,5 +105,29 @@ def test_turn_completion_uses_the_final_agent_message_in_turn_items() -> None:
         await server._reader()
 
         assert await server._turn_waiter == "Final verified answer"
+
+    asyncio.run(exercise())
+
+
+def test_reader_ignores_late_events_from_a_different_thread() -> None:
+    class Process:
+        def __init__(self, stdout: asyncio.StreamReader) -> None:
+            self.stdout = stdout
+            self.returncode: int | None = None
+
+    async def exercise() -> None:
+        server = CodexAppServer("codex", "test-key", timeout_seconds=5)
+        stream = asyncio.StreamReader()
+        server._process = Process(stream)  # type: ignore[assignment]
+        server._active_thread_id = "active-thread"
+        server._turn_waiter = asyncio.get_running_loop().create_future()
+        stream.feed_data(b'{"method":"item/agentMessage/delta","params":{"threadId":"old-thread","itemId":"old","delta":"stale"}}\n')
+        stream.feed_data(b'{"method":"turn/completed","params":{"threadId":"old-thread","turn":{"status":"completed"}}}\n')
+        stream.feed_data(b'{"method":"turn/completed","params":{"threadId":"active-thread","turn":{"status":"completed","items":[{"type":"agentMessage","text":"Current answer"}]}}}\n')
+        stream.feed_eof()
+
+        await server._reader()
+
+        assert await server._turn_waiter == "Current answer"
 
     asyncio.run(exercise())
