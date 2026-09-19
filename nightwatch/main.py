@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+import asyncio
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -12,17 +14,35 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 
 from nightwatch.api.events import router as events_router
+from nightwatch.api.health import router as health_router
 from nightwatch.config import Settings, get_settings
 from nightwatch.events.bus import EventBus
+from nightwatch.events.models import RealtimeEvent
 from nightwatch.security.access import RealtimeTicketRegistry, valid_frontend_token
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     active_settings = settings or get_settings()
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        async def heartbeat() -> None:
+            while True:
+                await asyncio.sleep(active_settings.heartbeat_interval_seconds)
+                await app.state.event_bus.publish(RealtimeEvent(payload={"source": "control-plane"}))
+
+        heartbeat_task = asyncio.create_task(heartbeat(), name="nightwatch-heartbeat")
+        try:
+            yield
+        finally:
+            heartbeat_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await heartbeat_task
+
     app = FastAPI(
         title=active_settings.application_name,
         version=active_settings.version,
+        lifespan=lifespan,
         docs_url=None if active_settings.environment == "production" else "/docs",
         redoc_url=None if active_settings.environment == "production" else "/redoc",
         openapi_url=None if active_settings.environment == "production" else "/openapi.json",
@@ -63,11 +83,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.headers["X-Request-ID"] = request_id
         return response
 
-    @app.get("/api/health")
-    async def health() -> dict[str, str]:
-        return {"status": "ok", "service": "nightwatch"}
-
     app.include_router(events_router, prefix="/api")
+    app.include_router(health_router, prefix="/api")
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, _: RequestValidationError) -> JSONResponse:

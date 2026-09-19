@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     operator_token: SecretStr | None = None
     event_queue_size: int = Field(default=100, ge=1, le=10_000)
     realtime_ticket_ttl_seconds: int = Field(default=45, ge=10, le=120)
+    heartbeat_interval_seconds: float = Field(default=5.0, gt=0, le=300)
 
     @field_validator("cors_origins", "websocket_origins", mode="before")
     @classmethod
