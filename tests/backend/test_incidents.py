@@ -91,10 +91,14 @@ def test_investigator_preserves_the_sdk_computed_output_text() -> None:
         async def create(self, **_kwargs: object) -> Response:
             return Response()
 
+    class Tools:
+        def definitions(self) -> list[dict[str, object]]:
+            return []
+
     async def exercise() -> None:
         investigator = InvestigatorService(
             cast(IncidentService, None),
-            cast(InvestigationToolRegistry, None),
+            cast(InvestigationToolRegistry, Tools()),
             api_key=None,
             model="gpt-5.6-luna",
             max_tool_calls=1,
