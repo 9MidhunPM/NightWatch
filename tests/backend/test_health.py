@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 from nightwatch.config import Settings
 from nightwatch.main import create_app
 from nightwatch.storage.database import Base, create_database
@@ -29,7 +28,7 @@ async def test_health_endpoint_returns_control_plane_identity(tmp_path: Path) ->
     assert response.status_code == 200
     assert response.headers["x-request-id"]
     assert response.json()["status"] == "ok"
-    assert response.json()["application"] == "Nightwatch"
+    assert response.json()["application"] == "NightWatch"
     assert response.json()["version"] == "0.1.0"
     assert response.json()["timestamp"].endswith("Z")
 
@@ -48,7 +47,9 @@ async def test_application_startup_creates_sqlite_file(tmp_path: Path) -> None:
 async def test_not_found_uses_structured_error_envelope(tmp_path: Path) -> None:
     settings = Settings(database_url=f"sqlite+aiosqlite:///{tmp_path / 'errors.db'}")
     app = create_app(settings)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         response = await client.get("/api/missing")
 
     assert response.status_code == 404

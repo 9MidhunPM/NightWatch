@@ -31,6 +31,7 @@ from nightwatch.api.host import router as host_router
 from nightwatch.api.incidents import router as incidents_router
 from nightwatch.api.operations import router as operations_router
 from nightwatch.api.topology import router as topology_router
+from nightwatch.api.world import router as world_router
 from nightwatch.chaos.service import ChaosService
 from nightwatch.config import Settings, get_settings
 from nightwatch.events.bus import EventBus
@@ -48,6 +49,7 @@ from nightwatch.services.incident_service import IncidentService
 from nightwatch.services.monitoring_service import MonitoringService
 from nightwatch.services.operations_service import OperationsService
 from nightwatch.services.topology_service import TopologyService
+from nightwatch.services.world_service import WorldService
 from nightwatch.storage.database import create_database, verify_database
 from nightwatch.tools.investigation_tools import InvestigationToolRegistry
 
@@ -83,19 +85,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             BeszelAdapter(
                 active_settings.beszel_url,
                 active_settings.beszel_email,
-                active_settings.beszel_password.get_secret_value() if active_settings.beszel_password else None,
+                active_settings.beszel_password.get_secret_value()
+                if active_settings.beszel_password
+                else None,
                 active_settings.beszel_system_id,
             )
         )
         app.state.incident_service = IncidentService(session_factory, app.state.event_bus)
-        app.state.codex_app_server = CodexAppServer(
-            active_settings.codex_app_server_command,
-            active_settings.codex_api_key.get_secret_value() if active_settings.codex_api_key else None,
-            timeout_seconds=active_settings.codex_app_server_timeout_seconds,
-        ) if active_settings.codex_app_server_enabled else None
+        app.state.codex_app_server = (
+            CodexAppServer(
+                active_settings.codex_app_server_command,
+                active_settings.codex_api_key.get_secret_value()
+                if active_settings.codex_api_key
+                else None,
+                timeout_seconds=active_settings.codex_app_server_timeout_seconds,
+            )
+            if active_settings.codex_app_server_enabled
+            else None
+        )
         app.state.operations_service = OperationsService(
-            app.state.docker_service, app.state.host_service, app.state.incident_service,
-            api_key=active_settings.codex_api_key.get_secret_value() if active_settings.codex_api_key else None,
+            app.state.docker_service,
+            app.state.host_service,
+            app.state.incident_service,
+            api_key=active_settings.codex_api_key.get_secret_value()
+            if active_settings.codex_api_key
+            else None,
             model=active_settings.codex_model,
             app_server=app.state.codex_app_server,
         )
@@ -119,7 +133,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             session_factory,
             dokploy_adapter,
             github_id=active_settings.dokploy_github_id,
-            github_read_token=(active_settings.github_read_token.get_secret_value() if active_settings.github_read_token else None),
+            github_read_token=(
+                active_settings.github_read_token.get_secret_value()
+                if active_settings.github_read_token
+                else None
+            ),
             secret_catalog=(
                 active_settings.deployment_secret_catalog.get_secret_value()
                 if active_settings.deployment_secret_catalog
@@ -134,9 +152,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.deployment_service,
         )
         app.state.operations_service.set_tool_broker(tool_broker)
-        app.state.conversation_service = ConversationService(session_factory, app.state.operations_service, app.state.deployment_service)
+        app.state.conversation_service = ConversationService(
+            session_factory, app.state.operations_service, app.state.deployment_service
+        )
         if app.state.codex_app_server is not None:
-            app.state.codex_app_server.configure_tools(tool_broker.definitions(), tool_broker.execute)
+            app.state.codex_app_server.configure_tools(
+                tool_broker.definitions(), tool_broker.execute
+            )
             await app.state.codex_app_server.start()
             logger.info(
                 "codex app-server status available=%s tool_count=%s",
@@ -155,12 +177,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             active_settings.demo_compose_service,
         )
         app.state.repair_execution_service = RepairExecutionService(
-            session_factory, app.state.event_bus, app.state.docker_service, app.state.topology_service,
+            session_factory,
+            app.state.event_bus,
+            app.state.docker_service,
+            app.state.topology_service,
             demo_source,
-            active_settings.demo_url or active_settings.public_demo_url, active_settings.demo_internal_health_url,
+            active_settings.demo_url or active_settings.public_demo_url,
+            active_settings.demo_internal_health_url,
             active_settings.monitor_timeout_seconds,
         )
-        app.state.chaos_service = ChaosService(demo_source, app.state.event_bus, active_settings.demo_expected_port)
+        app.state.chaos_service = ChaosService(
+            demo_source, app.state.event_bus, active_settings.demo_expected_port
+        )
         app.state.investigator_service = InvestigatorService(
             app.state.incident_service,
             InvestigationToolRegistry(
@@ -192,6 +220,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.investigator_service if active_settings.investigator_enabled else None
             ),
         )
+        app.state.world_service = WorldService(
+            session_factory,
+            dokploy_adapter,
+            app.state.docker_service,
+            app.state.incident_service,
+            app.state.event_bus,
+        )
+        await app.state.world_service.restore()
+        world_task = (
+            asyncio.create_task(app.state.world_service.run(), name="nightwatch-world")
+            if dokploy_adapter.configured and active_settings.environment != "test"
+            else None
+        )
         await app.state.host_service.refresh(publish_event=False)
         await app.state.remediation_service.reconcile_confirmed_plans()
         heartbeat_task = asyncio.create_task(heartbeat_loop(app), name="nightwatch-heartbeat")
@@ -207,6 +248,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             yield
         finally:
+            if world_task:
+                world_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await world_task
             heartbeat_task.cancel()
             if monitoring_task:
                 monitoring_task.cancel()
@@ -247,7 +292,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request.state.request_id = request_id
         response: Response
         requires_frontend_auth = (
-            active_settings.environment == "production" or active_settings.frontend_token is not None
+            active_settings.environment == "production"
+            or active_settings.frontend_token is not None
         )
         if requires_frontend_auth and request.url.path != "/api/health":
             expected = (
@@ -290,6 +336,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         return error_response(request, "INTERNAL_ERROR", "An internal error occurred.", 500)
 
+    app.include_router(world_router, prefix="/api")
     app.include_router(health_router, prefix="/api")
     app.include_router(events_router, prefix="/api")
     app.include_router(host_router, prefix="/api")

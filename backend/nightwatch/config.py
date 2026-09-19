@@ -19,7 +19,7 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
-    application_name: str = "Nightwatch"
+    application_name: str = "NightWatch"
     version: str = "0.1.0"
     environment: Literal["development", "test", "production"] = "development"
     host: str = "127.0.0.1"
@@ -104,7 +104,10 @@ class Settings(BaseSettings):
             raise ValueError("NW_FRONTEND_TOKEN must be at least 32 characters in production")
         if not self.cors_origins or not self.websocket_origins:
             raise ValueError("Exact CORS and WebSocket origins are required in production")
-        if any(not origin.startswith("https://") for origin in (*self.cors_origins, *self.websocket_origins)):
+        if any(
+            not origin.startswith("https://")
+            for origin in (*self.cors_origins, *self.websocket_origins)
+        ):
             raise ValueError("Production CORS and WebSocket origins must use HTTPS")
         return self
 

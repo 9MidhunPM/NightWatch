@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 from datetime import UTC, datetime
+from typing import Literal
 from urllib.parse import urlparse
 
 import httpx
@@ -267,7 +268,7 @@ class DeploymentService:
             manifest_notes=notes, conversation_id=request.conversation_id,
         ))
 
-    async def _repository_facts(self, owner: str, repository: str, branch: str, private: bool) -> tuple[str, int, str | None, str] | None:
+    async def _repository_facts(self, owner: str, repository: str, branch: str, private: bool) -> tuple[Literal["dockerfile", "compose", "static"], int, str | None, str] | None:
         headers = {"accept": "application/vnd.github+json", "user-agent": "nightwatch"}
         if self._github_read_token:
             headers["authorization"] = f"Bearer {self._github_read_token}"

@@ -26,7 +26,7 @@ class DockerAdapter:
     """Read-only, normalized access to the local Docker daemon."""
 
     _SAFE_LABEL_PREFIXES = ("com.docker.compose.", "org.opencontainers.image.")
-    _SAFE_LABELS = frozenset({"nightwatch.demo"})
+    _SAFE_LABELS = frozenset({"nightwatch.demo", "com.docker.swarm.service.name", "com.docker.swarm.service.id"})
 
     def __init__(self, timeout_seconds: int = 3) -> None:
         self._timeout_seconds = timeout_seconds

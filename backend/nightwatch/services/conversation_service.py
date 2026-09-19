@@ -192,4 +192,4 @@ class ConversationService:
         )
 
     def _detail(self, item: AgentConversation, turns: Sequence[AgentTurn], pending_actions: Sequence[dict[str, object]]) -> AgentConversationDetail:
-        return AgentConversationDetail(**self._summary(item).model_dump(), turns=[self._turn(turn) for turn in turns], pending_actions=pending_actions)
+        return AgentConversationDetail(**self._summary(item).model_dump(), turns=[self._turn(turn) for turn in turns], pending_actions=list(pending_actions))
