@@ -151,9 +151,24 @@ class DokployAdapter:
         await self._async_request("POST", "/api/domain.create", json={"applicationId": application_id, "host": host, "port": port, "https": True, "certificateType": "letsencrypt"})
 
     async def deploy_application(self, application_id: str) -> None:
-        await self._async_request("POST", "/api/application.deploy", json={"applicationId": application_id})
+        # Dokploy queues deployments asynchronously and replies with an empty 2xx
+        # body on some supported releases. The HTTP success status is the only
+        # acknowledgement available from that endpoint.
+        await self._async_request(
+            "POST", "/api/application.deploy",
+            json={"applicationId": application_id},
+            allow_empty_response=True,
+        )
 
-    async def _async_request(self, method: str, path: str, *, params: dict[str, str | int | float | bool | None] | None = None, json: dict[str, object] | None = None) -> object:
+    async def _async_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, str | int | float | bool | None] | None = None,
+        json: dict[str, object] | None = None,
+        allow_empty_response: bool = False,
+    ) -> object:
         if not self.configured:
             raise DokployError("Dokploy URL or API key is not configured.")
         try:
@@ -163,6 +178,8 @@ class DokployAdapter:
             raise DokployError(f"Dokploy is unavailable while calling {path}.") from exc
         if not response.is_success:
             raise DokployError(f"Dokploy rejected {path} with HTTP {response.status_code}.")
+        if allow_empty_response and not response.content.strip():
+            return None
         try:
             return response.json()
         except ValueError as exc:

@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import select
 
 from nightwatch.adapters.dokploy import DokployAdapter, DokployError
@@ -38,6 +39,33 @@ def test_deployment_request_keeps_only_secret_names_at_the_public_boundary() -> 
     assert service._secrets_available(request.secret_names)
     assert service._environment_for(request.secret_names) == "DATABASE_URL=never-returned"
     assert service.status().configured is True
+
+
+def test_deployment_request_normalizes_a_fully_qualified_repository() -> None:
+    request = DeploymentPlanRequest(
+        owner="9MidhunPM",
+        repository="9MidhunPM/prompt-to-website",
+        branch="main",
+        project_name="prompt-to-website",
+        service_name="prompt-to-website-web",
+        port=80,
+        manifest_notes="Dockerfile exposes port 80.",
+    )
+    assert request.owner == "9MidhunPM"
+    assert request.repository == "prompt-to-website"
+
+
+def test_deployment_request_rejects_a_repository_from_another_owner() -> None:
+    with pytest.raises(ValidationError, match="repository owner must match owner"):
+        DeploymentPlanRequest(
+            owner="9MidhunPM",
+            repository="someone-else/prompt-to-website",
+            branch="main",
+            project_name="prompt-to-website",
+            service_name="prompt-to-website-web",
+            port=80,
+            manifest_notes="Dockerfile exposes port 80.",
+        )
 
 
 def test_dokploy_actions_are_explicitly_approval_gated() -> None:

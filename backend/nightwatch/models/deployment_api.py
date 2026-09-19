@@ -1,9 +1,24 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+
+def _repository_name(owner: str, repository: str) -> tuple[str, str]:
+    normalized_owner = owner.strip().strip("/")
+    normalized_repository = repository.strip().strip("/")
+    if not normalized_owner or "/" in normalized_owner:
+        raise ValueError("owner must be a single GitHub account name")
+    if "/" not in normalized_repository:
+        return normalized_owner, normalized_repository
+    repository_owner, separator, repository_name = normalized_repository.partition("/")
+    if not separator or not repository_name or "/" in repository_name:
+        raise ValueError("repository must be a repository name or owner/repository")
+    if repository_owner.casefold() != normalized_owner.casefold():
+        raise ValueError("repository owner must match owner")
+    return normalized_owner, repository_name
 
 
 class GithubRepository(BaseModel):
@@ -29,6 +44,11 @@ class DeploymentPlanRequest(BaseModel):
     manifest_notes: str = Field(min_length=5, max_length=3000)
     conversation_id: str | None = Field(default=None, min_length=1, max_length=36)
 
+    @model_validator(mode="after")
+    def normalize_repository(self) -> Self:
+        self.owner, self.repository = _repository_name(self.owner, self.repository)
+        return self
+
 
 class InferredDeploymentRequest(BaseModel):
     owner: str = Field(min_length=1, max_length=120)
@@ -39,6 +59,11 @@ class InferredDeploymentRequest(BaseModel):
     port: int | None = Field(default=None, ge=1, le=65535)
     environment_name: str = Field(default="production", min_length=2, max_length=80)
     conversation_id: str | None = Field(default=None, min_length=1, max_length=36)
+
+    @model_validator(mode="after")
+    def normalize_repository(self) -> Self:
+        self.owner, self.repository = _repository_name(self.owner, self.repository)
+        return self
 
 
 class DeploymentApprovalRequest(BaseModel):
