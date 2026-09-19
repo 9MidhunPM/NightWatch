@@ -1,11 +1,8 @@
-from __future__ import annotations
-
 from typing import cast
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status
 
 from nightwatch.config import Settings
-from nightwatch.events.bus import EventBus
 from nightwatch.events.models import RealtimeEvent
 from nightwatch.security.access import RealtimeTicketRegistry
 
@@ -16,30 +13,34 @@ router = APIRouter(tags=["events"])
 async def create_realtime_ticket(request: Request) -> dict[str, str]:
     settings = cast(Settings, request.app.state.settings)
     secret = settings.frontend_token.get_secret_value() if settings.frontend_token else ""
-    registry = cast(RealtimeTicketRegistry, request.app.state.realtime_tickets)
-    return {"ticket": registry.issue(secret, settings.realtime_ticket_ttl_seconds)}
+    tickets = cast(RealtimeTicketRegistry, request.app.state.realtime_tickets)
+    return {"ticket": tickets.issue(secret, settings.realtime_ticket_ttl_seconds)}
+
+
+def is_origin_allowed(origin: str | None, allowed_origins: tuple[str, ...]) -> bool:
+    return origin is not None and origin in allowed_origins
 
 
 @router.websocket("/events")
 async def event_stream(websocket: WebSocket) -> None:
-    settings = cast(Settings, websocket.app.state.settings)
+    allowed_origins = websocket.app.state.settings.websocket_origins
     origin = websocket.headers.get("origin")
-    token = next(
-        (
-            item.strip()
-            for item in websocket.headers.get("sec-websocket-protocol", "").split(",")
-            if item.strip().startswith("nightwatch-ticket.")
-        ),
+    configured_token = websocket.app.state.settings.frontend_token
+    secret = configured_token.get_secret_value() if configured_token else ""
+    tickets = cast(RealtimeTicketRegistry, websocket.app.state.realtime_tickets)
+    protocol = next(
+        (item.strip() for item in websocket.headers.get("sec-websocket-protocol", "").split(",") if item.strip().startswith("nightwatch-ticket.")),
         None,
     )
-    ticket = token.removeprefix("nightwatch-ticket.") if token else None
-    secret = settings.frontend_token.get_secret_value() if settings.frontend_token else ""
-    registry = cast(RealtimeTicketRegistry, websocket.app.state.realtime_tickets)
-    if origin not in settings.websocket_origins or not registry.consume(ticket, secret):
+    ticket = protocol.removeprefix("nightwatch-ticket.") if protocol else None
+    if not is_origin_allowed(origin, allowed_origins) or not tickets.consume(
+        ticket, secret
+    ):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
-    await websocket.accept(subprotocol=token)
-    bus = cast(EventBus, websocket.app.state.event_bus)
+
+    await websocket.accept(subprotocol=protocol)
+    bus = websocket.app.state.event_bus
     try:
         async with bus.subscribe() as queue:
             await bus.publish(RealtimeEvent(payload={"source": "connection"}))
