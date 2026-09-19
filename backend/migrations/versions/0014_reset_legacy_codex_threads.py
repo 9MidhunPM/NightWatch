@@ -1,14 +1,14 @@
 """Reset persisted app-server threads so every resumed conversation starts on Luna.
 
 Revision ID: 0014_reset_legacy_codex_threads
-Revises: 0013_world_state
+Revises: 0013
 """
 
 from alembic import op
 
 
 revision = "0014_reset_legacy_codex_threads"
-down_revision = "0013_world_state"
+down_revision = "0013"
 branch_labels = None
 depends_on = None
 
