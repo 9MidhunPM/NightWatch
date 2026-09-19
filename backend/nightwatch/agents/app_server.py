@@ -75,17 +75,17 @@ class CodexAppServer:
         if self._connected or not self._api_key:
             return
         workspace = Path(os.environ.get("NW_CODEX_WORKSPACE", "/app/backend/data/codex-workspace"))
-        workspace.mkdir(mode=0o700, exist_ok=True)
         codex_home = workspace.parent / "codex-home"
-        codex_home.mkdir(mode=0o700, exist_ok=True)
-        environment = {
-            "PATH": os.environ.get("PATH", ""),
-            "OPENAI_API_KEY": self._api_key,
-            "CODEX_API_KEY": self._api_key,
-            "HOME": str(codex_home),
-            "CODEX_HOME": str(codex_home),
-        }
         try:
+            workspace.mkdir(mode=0o700, parents=True, exist_ok=True)
+            codex_home.mkdir(mode=0o700, parents=True, exist_ok=True)
+            environment = {
+                "PATH": os.environ.get("PATH", ""),
+                "OPENAI_API_KEY": self._api_key,
+                "CODEX_API_KEY": self._api_key,
+                "HOME": str(codex_home),
+                "CODEX_HOME": str(codex_home),
+            }
             self._process = await asyncio.create_subprocess_exec(
                 self._command,
                 "app-server",

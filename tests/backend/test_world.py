@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
 from nightwatch.adapters.domain_probe import probe_domain, public_address
 from nightwatch.models.world import (
     DomainCheck,

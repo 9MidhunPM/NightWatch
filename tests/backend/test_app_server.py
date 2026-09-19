@@ -1,7 +1,33 @@
 import asyncio
 import json
+from pathlib import Path
+
+import pytest
 
 from nightwatch.agents.app_server import CodexAppServer
+
+
+def test_start_creates_nested_workspace_and_degrades_when_launch_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def exercise() -> None:
+        workspace = tmp_path / "missing" / "nested" / "codex-workspace"
+        monkeypatch.setenv("NW_CODEX_WORKSPACE", str(workspace))
+
+        async def fail_to_launch(*args: object, **kwargs: object) -> None:
+            raise OSError("codex unavailable")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fail_to_launch)
+        server = CodexAppServer("codex", "test-key", timeout_seconds=5)
+
+        await server.start()
+
+        assert workspace.is_dir()
+        assert (workspace.parent / "codex-home").is_dir()
+        assert server.available is False
+        assert "OSError" in server.message
+
+    asyncio.run(exercise())
 
 
 def test_dynamic_tool_calls_are_executed_by_typed_backend_broker() -> None:

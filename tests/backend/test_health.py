@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+
 from nightwatch.config import Settings
 from nightwatch.main import create_app
 from nightwatch.storage.database import Base, create_database
