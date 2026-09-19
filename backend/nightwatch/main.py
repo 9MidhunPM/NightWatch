@@ -218,7 +218,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if active_settings.codex_api_key
                 else None
             ),
-            model=active_settings.codex_model,
+            model=active_settings.automatic_model,
+            mini_model=active_settings.automatic_mini_model,
             max_tool_calls=active_settings.investigator_max_tool_calls,
             timeout_seconds=active_settings.investigator_timeout_seconds,
             on_root_cause_confirmed=app.state.remediation_service.plan_for_incident,

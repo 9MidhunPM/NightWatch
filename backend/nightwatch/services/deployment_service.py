@@ -488,16 +488,33 @@ class DeploymentService:
         return response
 
     async def execute(self, plan_id: str) -> None:
+        await self._execute(plan_id, retry=False)
+
+    async def retry(self, plan_id: str) -> DeploymentPlanResponse | None:
+        async with self._sessions() as session:
+            plan = await session.get(DeploymentPlan, plan_id)
+            execution = await session.scalar(select(DeploymentExecution).where(DeploymentExecution.deployment_plan_id == plan_id))
+            if plan is None or execution is None or plan.status != "FAILED" or execution.status != "FAILED":
+                return None
+            response = await self._response(session, plan)
+        asyncio.create_task(self._execute(plan_id, retry=True), name=f"nightwatch-deploy-retry-{plan_id}")
+        return response
+
+    async def _execute(self, plan_id: str, *, retry: bool) -> None:
         async with self._execution_lock:
             async with self._sessions() as session:
                 plan = await session.get(DeploymentPlan, plan_id)
-                if plan is None or plan.status != "APPROVED":
+                if plan is None or (plan.status != "APPROVED" and not (retry and plan.status == "FAILED")):
                     return
                 existing = await session.scalar(select(DeploymentExecution).where(DeploymentExecution.deployment_plan_id == plan.id))
-                if existing is not None:
+                if existing is not None and (not retry or existing.status != "FAILED"):
                     return
-                execution = DeploymentExecution(deployment_plan_id=plan.id, status="RUNNING", detail="Reconciling Dokploy project and service.")
-                session.add(execution)
+                if existing is None:
+                    execution = DeploymentExecution(deployment_plan_id=plan.id, status="RUNNING", detail="Reconciling Dokploy project and service.")
+                    session.add(execution)
+                else:
+                    execution = existing
+                    execution.status, execution.detail = "RUNNING", "Retrying the approved Dokploy reconciliation."
                 plan.status = "RUNNING"
                 await session.commit()
             try:
@@ -604,7 +621,7 @@ class DeploymentService:
             dockerfile=plan.dockerfile, port=plan.port, domain=plan.domain, secret_names=plan.secret_names,
             manifest_notes=plan.manifest_notes, conversation_id=plan.conversation_id, plan_digest=plan.plan_digest, policy_decision=plan.policy_decision,
             policy_reason=plan.policy_reason, execution_status=execution.status if execution else None,
-            execution_detail=execution.detail if execution else None, created_at=plan.created_at, updated_at=plan.updated_at,
+            execution_detail=execution.detail if execution else None, retry_available=bool(execution and plan.status == "FAILED" and execution.status == "FAILED"), created_at=plan.created_at, updated_at=plan.updated_at,
         )
 
     def _application_configuration(self, plan: DeploymentPlan) -> dict[str, object]:
@@ -617,7 +634,7 @@ class DeploymentService:
 
     @staticmethod
     def _build_configuration(plan: DeploymentPlan) -> dict[str, object]:
-        return {"buildType": plan.build_type, "dockerfile": plan.dockerfile, "dockerContextPath": plan.build_path, "dockerBuildStage": None, "publishDirectory": None, "isStaticSpa": False}
+        return {"buildType": plan.build_type, "dockerfile": plan.dockerfile, "dockerContextPath": plan.build_path, "dockerBuildStage": None, "publishDirectory": None, "isStaticSpa": False, "herokuVersion": "24", "railpackVersion": "0.15.4"}
 
     async def _verify_application_configuration(self, application_id: str, plan: DeploymentPlan) -> None:
         application = await self._dokploy.application_one(application_id)

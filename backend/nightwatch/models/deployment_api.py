@@ -70,6 +70,7 @@ class DeploymentPlanResponse(BaseModel):
     policy_reason: str
     execution_status: str | None = None
     execution_detail: str | None = None
+    retry_available: bool = False
     created_at: datetime
     updated_at: datetime
 

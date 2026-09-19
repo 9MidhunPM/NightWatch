@@ -54,9 +54,11 @@ class Settings(BaseSettings):
         default=None, validation_alias=AliasChoices("NW_DEMO_URL", "NIGHTWATCH_DEMO_URL")
     )
     log_level: str = "INFO"
-    # Luna is the only model NightWatch may use. Existing deployment variables
-    # cannot select a different model.
+    # Operator chat stays on Luna. Automatic investigations use the bounded
+    # OpenAI models below so startup and background work do not consume chat capacity.
     codex_model: Literal["gpt-5.6-luna"] = "gpt-5.6-luna"
+    automatic_model: Literal["gpt-4o"] = "gpt-4o"
+    automatic_mini_model: Literal["gpt-4o-mini"] = "gpt-4o-mini"
     codex_api_key: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("OPENAI_API_KEY", "NW_CODEX_API_KEY")
     )

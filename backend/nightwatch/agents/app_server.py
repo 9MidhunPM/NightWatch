@@ -48,7 +48,7 @@ class CodexAppServer:
 
     @property
     def available(self) -> bool:
-        return self._connected and self._turn_healthy
+        return self._connected
 
     @property
     def _connected(self) -> bool:
@@ -117,13 +117,6 @@ class CodexAppServer:
             await self._request("initialize", {"clientInfo": {"name": "nightwatch", "title": "Nightwatch", "version": "0.1.0"}, "capabilities": {"experimentalApi": True}})
             await self._notify("initialized", {})
             await self._request("account/login/start", {"type": "apiKey", "apiKey": self._api_key})
-            readiness = await self.answer(
-                "Reply with exactly READY.",
-                "This is a service readiness probe. Do not call a tool.",
-                conversation_id="__readiness__",
-            )
-            if not readiness:
-                raise RuntimeError(self._error or "Codex app-server did not pass its turn readiness probe.")
         except (OSError, RuntimeError, TimeoutError, TypeError) as exc:
             if self._error is None:
                 self._error = f"Codex app-server unavailable: {type(exc).__name__}."

@@ -234,6 +234,8 @@ def test_application_configuration_includes_the_dokploy_github_provider() -> Non
     assert github["repository"] == "prompt-to-website"
     assert build["buildType"] == "dockerfile"
     assert build["dockerfile"] == "Dockerfile"
+    assert build["herokuVersion"] == "24"
+    assert build["railpackVersion"] == "0.15.4"
 
 
 def test_inferred_deployment_request_preserves_an_explicit_application_port() -> None:
@@ -307,6 +309,8 @@ async def test_deployment_execution_persists_github_and_dockerfile_before_deploy
         assert dokploy.calls[0][1]["port"] == 80
         assert dokploy.calls[1][1]["repository"] == "prompt-to-website"
         assert dokploy.calls[2][1]["buildType"] == "dockerfile"
+        assert dokploy.calls[2][1]["herokuVersion"] == "24"
+        assert dokploy.calls[2][1]["railpackVersion"] == "0.15.4"
         result = next(item for item in await service.plans() if item.id == plan.id)
         assert result.status == "VERIFYING"
     finally:

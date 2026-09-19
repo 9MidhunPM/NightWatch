@@ -96,6 +96,16 @@ async def approve_plan(
     return plan
 
 
+@router.post("/plans/{plan_id}/retry", response_model=DeploymentPlanResponse)
+async def retry_plan(request: Request, plan_id: str, authorization: str | None = Header(default=None)) -> DeploymentPlanResponse:
+    if not _approval_authorized(request, authorization):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized.")
+    plan = await service(request).retry(plan_id)
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only a failed approved plan can be retried.")
+    return plan
+
+
 @router.post("/project-plans/{plan_id}/approval")
 async def approve_project_plan(
     request: Request, plan_id: str, payload: DeploymentApprovalRequest, authorization: str | None = Header(default=None)

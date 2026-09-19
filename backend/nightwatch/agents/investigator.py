@@ -53,6 +53,7 @@ class InvestigatorService:
         *,
         api_key: str | None,
         model: str,
+        mini_model: str = "gpt-4o-mini",
         max_tool_calls: int,
         timeout_seconds: float,
         on_root_cause_confirmed: Callable[[str], Awaitable[None]] | None = None,
@@ -60,6 +61,7 @@ class InvestigatorService:
         self._incident_service = incident_service
         self._tools = tools
         self._model = model
+        self._mini_model = mini_model
         self._max_tool_calls = max_tool_calls
         self._timeout_seconds = timeout_seconds
         self._client = AsyncOpenAI(api_key=api_key, timeout=timeout_seconds) if api_key else None
@@ -138,7 +140,7 @@ class InvestigatorService:
             {"role": "user", "content": json.dumps(self._context(incident), default=str)}
         ]
         for _ in range(self._max_tool_calls + 1):
-            response = await self._response(inputs)
+            response = await self._response(inputs, critical=incident.severity in {"CRITICAL", "HIGH"})
             calls = [
                 item for item in response.get("output", []) if item.get("type") == "function_call"
             ]
@@ -198,13 +200,13 @@ class InvestigatorService:
             incident.id, "Investigation reached its safety limit without a result."
         )
 
-    async def _response(self, inputs: list[dict[str, object]]) -> dict[str, Any]:
+    async def _response(self, inputs: list[dict[str, object]], *, critical: bool) -> dict[str, Any]:
         assert self._client is not None
         # Let the SDK translate the Pydantic model into the exact strict schema
         # supported by the selected Responses API model. Hand-built Pydantic JSON
         # Schema can contain optional fields that the strict endpoint rejects.
         response = await self._client.responses.parse(
-            model=self._model,
+            model=self._model if critical else self._mini_model,
             instructions=_SYSTEM_PROMPT,
             input=inputs,  # type: ignore[arg-type]
             tools=self._tools.definitions(),  # type: ignore[arg-type]
