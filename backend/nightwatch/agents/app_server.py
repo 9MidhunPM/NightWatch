@@ -21,7 +21,7 @@ class CodexAppServer:
     backend supplies a redacted read-only evidence snapshot as turn input instead.
     """
 
-    def __init__(self, command: str, api_key: str | None, *, timeout_seconds: float, model: str = "gpt-6-astra", dynamic_tools: list[dict[str, object]] | None = None, tool_executor: ToolExecutor | None = None) -> None:
+    def __init__(self, command: str, api_key: str | None, *, timeout_seconds: float, model: str = "gpt-5.6-sol", dynamic_tools: list[dict[str, object]] | None = None, tool_executor: ToolExecutor | None = None) -> None:
         self._command = command
         self._api_key = api_key
         self._timeout_seconds = timeout_seconds

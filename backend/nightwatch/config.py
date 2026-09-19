@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # One explicit model is used by both the operations agent and investigator.
     # Provider availability remains visible; NightWatch never silently swaps models.
-    codex_model: Literal["gpt-6-astra", "gpt-5.6-luna"] = "gpt-6-astra"
+    codex_model: Literal["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] = "gpt-5.6-sol"
     codex_api_key: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("OPENAI_API_KEY", "NW_CODEX_API_KEY")
     )
