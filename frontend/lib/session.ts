@@ -1,0 +1,6 @@
+import {createHmac, timingSafeEqual, randomBytes} from 'node:crypto';
+export const COOKIE = 'nightwatch_session';
+export function equal(a:string,b:string){ const digest=(v:string)=>createHmac('sha256','nightwatch-compare').update(v).digest(); return timingSafeEqual(digest(a),digest(b)); }
+export function issueSession(secret:string,now=Date.now()){const body=Buffer.from(JSON.stringify({exp:now+8*60*60*1000,nonce:randomBytes(18).toString('hex')})).toString('base64url');return body+'.'+createHmac('sha256',secret).update(body).digest('base64url');}
+export function validSession(value:string|undefined,secret:string|undefined,now=Date.now()){if(!value||!secret||secret.length<32)return false;const [body,sig,...extra]=value.split('.');if(!body||!sig||extra.length||!equal(createHmac('sha256',secret).update(body).digest('base64url'),sig))return false;try{const data=JSON.parse(Buffer.from(body,'base64url').toString());return typeof data.exp==='number'&&data.exp>now&&data.exp<=now+8*60*60*1000;}catch{return false;}}
+export const originAllowed=(origin:string|null)=>{try{return !!origin&&new URL(origin).origin===new URL(process.env.NW_FRONTEND_ORIGIN||'http://localhost:3000').origin;}catch{return false;}};
