@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from nightwatch.adapters.beszel import BeszelContainer, BeszelContainerSnapshot
 from nightwatch.adapters.domain_probe import probe_domain, public_address
 from nightwatch.models.world import (
     DomainCheck,
@@ -107,8 +108,8 @@ def test_outage_threshold_and_two_check_recovery():
     asyncio.run(run())
 
 
-def test_unknown_is_not_hidden_and_network_is_not_dependency():
-    assert aggregate_health(["HEALTHY", "UNKNOWN"]) == "UNKNOWN"
+def test_runtime_health_is_not_hidden_by_an_unresolved_domain_and_network_is_not_dependency():
+    assert aggregate_health(["HEALTHY", "UNKNOWN"]) == "HEALTHY"
     assert aggregate_health(["HEALTHY", "UNHEALTHY"]) == "UNHEALTHY"
     resource = WorldResource(
         id="app:1",
@@ -130,6 +131,7 @@ def test_partial_project_coverage_does_not_hide_known_health():
     assert aggregate_project_health(["HEALTHY", "UNKNOWN"]) == "DEGRADED"
     assert aggregate_project_health(["HEALTHY", "UNHEALTHY", "UNKNOWN"]) == "UNHEALTHY"
     assert aggregate_project_health(["UNKNOWN", "UNKNOWN"]) == "UNKNOWN"
+    assert aggregate_project_health(["UNAVAILABLE", "UNAVAILABLE"]) == "UNAVAILABLE"
 
 
 def test_dokploy_human_byte_units_are_normalized():
@@ -138,20 +140,30 @@ def test_dokploy_human_byte_units_are_normalized():
     assert parse_bytes("not-a-size") is None
 
 
-def test_swarm_runtime_is_authoritative_when_direct_docker_has_no_match():
-    class Dokploy:
-        async def swarm_services(self):
-            return [{"Name": "prism-api-hammpv", "Replicas": "1/1"}]
-
-        async def swarm_container_stats(self):
-            return [{
-                "Name": "prism-api-hammpv.1.task",
-                "CPUPerc": "0.11%",
-                "MemPerc": "2.57%",
-                "MemUsage": "306.4MiB / 11.65GiB",
-                "NetIO": "786MB / 37.2MB",
-                "BlockIO": "22.2MB / 7.73MB",
-            }]
+def test_beszel_runtime_is_authoritative_when_direct_docker_has_no_match():
+    class Beszel:
+        async def containers(self):
+            observed_at = datetime.now(UTC)
+            return BeszelContainerSnapshot(
+                configured=True,
+                available=True,
+                stale=False,
+                message=None,
+                system_id="system-1",
+                observed_at=observed_at,
+                containers=[BeszelContainer(
+                    id="container-1",
+                    name="prism-api-hammpv.1.task",
+                    status="Up 2 minutes",
+                    health=2,
+                    cpu_percent=0.11,
+                    memory_used_bytes=round(306.4 * 1024**2),
+                    network_bytes=786_000_000,
+                    image=None,
+                    observed_at=observed_at,
+                    stale=False,
+                )],
+            )
 
     class Docker:
         async def inventory(self, publish_event=False):
@@ -171,12 +183,12 @@ def test_swarm_runtime_is_authoritative_when_direct_docker_has_no_match():
             generated_at=datetime.now(UTC),
             projects=[WorldProject(id="prism", name="PRISM", resources=[resource])],
         )
-        service = WorldService(None, Dokploy(), Docker(), None, None)
+        service = WorldService(None, None, Docker(), None, None, beszel=Beszel())
         await service.runtime(snapshot)
         assert resource.health == "HEALTHY"
-        assert resource.runtime_state == "1/1 replicas"
+        assert resource.runtime_state == "1 observed replica"
         assert resource.metrics is not None
-        assert resource.metrics.memory_used_bytes == 321_283_686
+        assert resource.metrics.memory_used_bytes == round(306.4 * 1024**2)
         assert resource.metrics.network_rx_bytes == 786_000_000
 
     asyncio.run(run())

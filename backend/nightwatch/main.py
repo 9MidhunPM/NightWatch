@@ -250,7 +250,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if active_settings.monitoring_enabled
             else None
         )
-        logger.info("control plane started", extra={"result": "ready"})
+        logger.info(
+            "control plane started",
+            extra={"result": {"state": "ready", "agent_model": active_settings.codex_model}},
+        )
         try:
             yield
         finally:

@@ -11,6 +11,7 @@ import yaml
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from nightwatch.adapters.beszel import BeszelContainer
 from nightwatch.adapters.docker import DockerUnavailableError
 from nightwatch.adapters.dokploy import DokployAdapter, DokployError
 from nightwatch.adapters.domain_probe import probe_domain
@@ -48,17 +49,22 @@ SERVICE_TYPES = {
 
 def aggregate_health(states: list[str]) -> str:
     if not states:
+        return "UNAVAILABLE"
+    known = [state for state in states if state != "UNKNOWN"]
+    if not known:
         return "UNKNOWN"
-    for state in ("UNHEALTHY", "DEGRADED", "UNKNOWN", "CHANGING", "STOPPED"):
-        if state in states:
+    for state in ("UNHEALTHY", "DEGRADED", "CHANGING", "STOPPED", "UNAVAILABLE"):
+        if state in known:
             return state
     return "HEALTHY"
 
 
 def aggregate_project_health(states: list[str]) -> str:
-    if not states or all(state == "UNKNOWN" for state in states):
-        return "UNKNOWN"
-    known = [state for state in states if state != "UNKNOWN"]
+    if not states:
+        return "UNAVAILABLE"
+    if all(state in {"UNKNOWN", "UNAVAILABLE"} for state in states):
+        return "UNAVAILABLE" if "UNAVAILABLE" in states else "UNKNOWN"
+    known = [state for state in states if state not in {"UNKNOWN", "UNAVAILABLE"}]
     for state in ("UNHEALTHY", "DEGRADED", "CHANGING", "STOPPED"):
         if state in known:
             return state
@@ -125,6 +131,7 @@ class WorldService:
         self._discovered = 0.0
         self._probed = 0.0
         self._limit = asyncio.Semaphore(4)
+        self._beszel_runtime_state: tuple[bool, bool, int] | None = None
 
     async def restore(self) -> None:
         async with self.sessions() as session:
@@ -378,41 +385,39 @@ class WorldService:
         return sorted(projects, key=lambda project: project.name.casefold())
 
     async def runtime(self, snapshot: WorldSnapshot) -> None:
-        observed_at = datetime.now(UTC)
-        try:
-            swarm_services, swarm_stats = await asyncio.gather(
-                self.dokploy.swarm_services(), self.dokploy.swarm_container_stats()
-            )
-        except (DokployError, ValueError, TypeError):
-            swarm_services, swarm_stats = [], []
-            snapshot.sources["dokploy_swarm"] = "unavailable"
+        if self.beszel is None:
+            runtime = None
+            snapshot.sources["beszel"] = "unavailable"
         else:
-            snapshot.sources["dokploy_swarm"] = "available"
-        service_by_name = {
-            str(item.get("Name")): item
-            for item in swarm_services
-            if isinstance(item.get("Name"), str)
-        }
-        stats_by_service: dict[str, list[dict[str, object]]] = {}
-        for item in swarm_stats:
-            name = str(item.get("Name") or "")
-            service_name = name.split(".", maxsplit=1)[0] if "." in name else name
-            stats_by_service.setdefault(service_name, []).append(item)
+            runtime = await self.beszel.containers()
+            snapshot.sources["beszel"] = "available" if runtime.available else "unavailable"
+            state = (runtime.available, runtime.stale, len(runtime.containers))
+            if state != self._beszel_runtime_state:
+                logger.info(
+                    "Beszel runtime observation changed: available=%s stale=%s containers=%s",
+                    *state,
+                )
+                self._beszel_runtime_state = state
         try:
-            inventory = await self.docker.inventory(publish_event=False)
+            inventory = await self.docker.inventory(publish_event=False) if self.docker else None
         except DockerUnavailableError:
             snapshot.sources["docker"] = "unavailable"
             inventory = None
         else:
-            snapshot.sources["docker"] = "available"
+            snapshot.sources["docker"] = "available" if inventory else "unavailable"
         for project in snapshot.projects:
             for resource in project.resources:
                 resource.evidence = [
                     EvidenceStatus(source="dokploy", observed_at=resource.observed_at, state="available" if resource.observed_at else "unavailable"),
-                    EvidenceStatus(source="dokploy_swarm", observed_at=observed_at if swarm_services else None, state="available" if swarm_services else "unavailable"),
+                    EvidenceStatus(
+                        source="beszel",
+                        observed_at=runtime.observed_at if runtime else None,
+                        state="available" if runtime and runtime.available and not runtime.stale else "unavailable",
+                        message=runtime.message if runtime else "Beszel runtime telemetry is unavailable.",
+                    ),
                     EvidenceStatus(source="docker", observed_at=inventory.discovered_at if inventory else None, state="available" if inventory else "unavailable"),
                 ]
-                matches = [
+                docker_matches = [
                     c
                     for c in (inventory.containers if inventory else [])
                     if resource.app_name
@@ -427,74 +432,59 @@ class WorldService:
                         or c.compose_service == resource.compose_service
                     )
                 ]
-                resource.container_ids = [f"container:{c.id}" for c in matches]
-                resource.networks = sorted({n for c in matches for n in c.networks})
-                swarm = service_by_name.get(resource.app_name)
-                replica_match = re.fullmatch(r"(\d+)\s*/\s*(\d+)", str(swarm.get("Replicas") or "")) if swarm else None
-                if replica_match:
-                    running, desired = int(replica_match.group(1)), int(replica_match.group(2))
-                    resource.replicas = ReplicaState(running=running, desired=desired)
-                    resource.runtime_state = f"{running}/{desired} replicas"
-                else:
-                    resource.replicas = None
-                    resource.runtime_state = ", ".join(sorted({c.state for c in matches})) or "not observed"
-                samples = list(stats_by_service.get(resource.app_name, []))
-                if resource.compose_service:
-                    compose_prefix = f"{resource.app_name}-{resource.compose_service}-"
-                    samples.extend(
-                        item
-                        for item in swarm_stats
-                        if str(item.get("Name") or "").startswith(compose_prefix)
-                    )
-                if samples:
-                    memory_pairs = [parse_pair(item.get("MemUsage")) for item in samples]
-                    network_pairs = [parse_pair(item.get("NetIO")) for item in samples]
-                    block_pairs = [parse_pair(item.get("BlockIO")) for item in samples]
-                    cpu_values = [value for item in samples if (value := parse_percent(item.get("CPUPerc"))) is not None]
-                    memory_percent_values = [value for item in samples if (value := parse_percent(item.get("MemPerc"))) is not None]
+                resource.networks = sorted({network for c in docker_matches for network in c.networks})
+                matches = [
+                    item
+                    for item in (runtime.containers if runtime and runtime.available else [])
+                    if self._beszel_matches(resource, item)
+                ]
+                resource.container_ids = [f"beszel:{item.id}" for item in matches if item.id]
+                if matches and not all(item.stale for item in matches):
+                    fresh = [item for item in matches if not item.stale]
+                    resource.replicas = ReplicaState(running=len(fresh))
+                    resource.runtime_state = f"{len(fresh)} observed replica{'s' if len(fresh) != 1 else ''}"
+                    cpu_values = [item.cpu_percent for item in fresh if item.cpu_percent is not None]
+                    memory_values = [item.memory_used_bytes for item in fresh if item.memory_used_bytes is not None]
+                    network_values = [item.network_bytes for item in fresh if item.network_bytes is not None]
                     resource.metrics = ResourceMetrics(
                         cpu_percent=round(sum(cpu_values), 2) if cpu_values else None,
-                        memory_used_bytes=sum(value for value, _ in memory_pairs if value is not None),
-                        memory_limit_bytes=max((limit for _, limit in memory_pairs if limit is not None), default=None),
-                        memory_percent=round(sum(memory_percent_values), 2) if memory_percent_values else None,
-                        network_rx_bytes=sum(value for value, _ in network_pairs if value is not None),
-                        network_tx_bytes=sum(value for _, value in network_pairs if value is not None),
-                        block_read_bytes=sum(value for value, _ in block_pairs if value is not None),
-                        block_write_bytes=sum(value for _, value in block_pairs if value is not None),
-                        restart_count=sum(c.restart_count for c in matches) if matches else None,
-                        observed_at=observed_at,
-                        source="dokploy_swarm",
+                        memory_used_bytes=sum(memory_values) if memory_values else None,
+                        network_rx_bytes=sum(network_values) if network_values else None,
+                        observed_at=max((item.observed_at for item in fresh if item.observed_at), default=None),
+                        source="beszel",
                     )
-                elif matches:
-                    resource.metrics = None
-                if resource.replicas is not None:
-                    if resource.deployment_state == "running":
-                        resource.health = "CHANGING"
-                    elif resource.replicas.desired == 0:
-                        resource.health = "STOPPED"
-                    elif resource.replicas.running == 0:
-                        resource.health = "UNHEALTHY"
-                    elif resource.replicas.running < resource.replicas.desired:
-                        resource.health = "DEGRADED"
-                    else:
-                        resource.health = "HEALTHY"
-                elif not matches:
-                    resource.health = (
-                        "CHANGING" if resource.deployment_state == "running" else "UNKNOWN"
-                    )
+                    resource.health = self._beszel_health(fresh)
                 else:
-                    resource.health = aggregate_health(
-                        [
-                            "UNHEALTHY"
-                            if c.health == "unhealthy" or c.state == "dead"
-                            else "STOPPED"
-                            if c.state == "exited"
-                            else "HEALTHY"
-                            if c.state == "running"
-                            else "DEGRADED"
-                            for c in matches
-                        ]
-                    )
+                    resource.replicas = None
+                    resource.metrics = None
+                    resource.runtime_state = "Beszel has no fresh matching container"
+                    resource.health = "UNAVAILABLE"
+
+    @staticmethod
+    def _beszel_matches(resource: WorldResource, container: BeszelContainer) -> bool:
+        if not resource.app_name or not container.name:
+            return False
+        name = container.name.lstrip("/").casefold()
+        app_name = resource.app_name.casefold()
+        prefixes = [
+            f"{app_name}-{resource.compose_service.casefold()}"
+            if resource.compose_service
+            else app_name
+        ]
+        return any(name == prefix or name.startswith((prefix + ".", prefix + "-", prefix + "_")) for prefix in prefixes)
+
+    @staticmethod
+    def _beszel_health(containers: list[BeszelContainer]) -> str:
+        statuses = [item.status.casefold() for item in containers]
+        if any(item.health == 3 for item in containers):
+            return "UNHEALTHY"
+        if any("dead" in status or "exited" in status or "stopped" in status for status in statuses):
+            return "STOPPED"
+        if any(item.health == 1 or "starting" in status or "restarting" in status for item, status in zip(containers, statuses, strict=True)):
+            return "CHANGING"
+        if any("up" in status or "running" in status for status in statuses):
+            return "HEALTHY"
+        return "DEGRADED"
 
     async def observe(self, previous: DomainCheck) -> DomainCheck:
         async with self._limit:

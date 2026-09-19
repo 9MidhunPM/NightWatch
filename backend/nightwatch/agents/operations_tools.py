@@ -281,12 +281,19 @@ class OperationsToolBroker:
         resource = detail.get("resource")
         if not isinstance(resource, dict):
             return detail
-        series = await self._beszel.history(range_name, container_name=str(resource.get("app_name") or ""))
+        app_name = str(resource.get("app_name") or "")
+        compose_service = resource.get("compose_service")
+        container_name = (
+            f"{app_name}-{compose_service}"
+            if isinstance(compose_service, str) and compose_service
+            else app_name
+        )
+        series = await self._beszel.history(range_name, container_name=container_name)
         return {
             "ok": True,
             "current": resource.get("metrics"),
             "history": series.model_dump(mode="json"),
-            "evidence": self._evidence(resource_id, "dokploy_swarm+beszel", f"Read current metrics and {len(series.points)} historical samples."),
+            "evidence": self._evidence(resource_id, "beszel", f"Read current metrics and {len(series.points)} historical samples."),
         }
 
     async def _logs(self, arguments: dict[str, object]) -> dict[str, object]:

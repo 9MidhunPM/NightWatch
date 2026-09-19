@@ -1,6 +1,6 @@
 export type DomainCheck={url:string;state:string;status_code:number|null;latency_ms:number|null;message:string;checked_at:string|null;failures:number;successes:number;incident_id:string|null};
 export type EvidenceStatus={source:string;observed_at:string|null;state:string;message:string|null};
-export type ReplicaState={running:number;desired:number};
+export type ReplicaState={running:number;desired:number|null};
 export type ResourceMetrics={cpu_percent:number|null;memory_used_bytes:number|null;memory_limit_bytes:number|null;memory_percent:number|null;network_rx_bytes:number|null;network_tx_bytes:number|null;block_read_bytes:number|null;block_write_bytes:number|null;restart_count:number|null;observed_at:string|null;source:string;stale:boolean};
 export type HostMetrics={cpu_percent:number|null;memory_used_bytes:number|null;memory_total_bytes:number|null;memory_percent:number|null;disk_used_bytes:number|null;disk_total_bytes:number|null;disk_percent:number|null;network_rx_bytes:number|null;network_tx_bytes:number|null;load_1m:number|null;observed_at:string|null;source:string;stale:boolean};
 export type DeploymentSummary={id:string;title:string;status:string;commit:string|null;created_at:string|null;finished_at:string|null};

@@ -54,9 +54,9 @@ class Settings(BaseSettings):
         default=None, validation_alias=AliasChoices("NW_DEMO_URL", "NIGHTWATCH_DEMO_URL")
     )
     log_level: str = "INFO"
-    # One explicit model is used by both the operations agent and investigator.
-    # Provider availability remains visible; NightWatch never silently swaps models.
-    codex_model: Literal["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] = "gpt-5.6-sol"
+    # Luna is the only model NightWatch may use. A different environment value
+    # fails startup rather than silently changing operational behavior.
+    codex_model: Literal["gpt-5.6-luna"] = "gpt-5.6-luna"
     codex_api_key: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("OPENAI_API_KEY", "NW_CODEX_API_KEY")
     )

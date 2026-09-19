@@ -104,8 +104,17 @@ async def agent_status(request: Request) -> AgentStatusResponse:
 
 @router.get("/observability/beszel")
 async def beszel_status(request: Request) -> dict[str, object]:
-    connection = await cast(BeszelService, request.app.state.beszel_service).connection()
-    return {"configured": connection.configured, "available": connection.available, "message": connection.message, "system_id": connection.system_id}
+    beszel = cast(BeszelService, request.app.state.beszel_service)
+    connection, containers = await asyncio.gather(beszel.connection(), beszel.containers())
+    return {
+        "configured": connection.configured,
+        "available": connection.available and containers.available,
+        "message": containers.message or connection.message,
+        "system_id": containers.system_id or connection.system_id,
+        "container_count": len(containers.containers),
+        "observed_at": containers.observed_at,
+        "stale": containers.stale,
+    }
 
 
 TelemetryRange = Literal["1h", "24h", "7d", "30d"]
@@ -127,8 +136,13 @@ async def resource_telemetry(
     )
     if resource is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource was not found.")
+    container_name = (
+        f"{resource.app_name}-{resource.compose_service}"
+        if resource.compose_service
+        else resource.app_name
+    )
     return await cast(BeszelService, request.app.state.beszel_service).history(
-        range, container_name=resource.app_name
+        range, container_name=container_name
     )
 
 

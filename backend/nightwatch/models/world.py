@@ -37,7 +37,7 @@ class EvidenceStatus(BaseModel):
 
 class ReplicaState(BaseModel):
     running: int = 0
-    desired: int = 0
+    desired: int | None = None
 
 
 class ResourceMetrics(BaseModel):

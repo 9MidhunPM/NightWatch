@@ -19,6 +19,31 @@ class BeszelConnection:
     system_id: str | None = None
 
 
+@dataclass(frozen=True)
+class BeszelContainer:
+    id: str
+    name: str
+    status: str
+    health: int
+    cpu_percent: float | None
+    memory_used_bytes: int | None
+    network_bytes: int | None
+    image: str | None
+    observed_at: datetime | None
+    stale: bool
+
+
+@dataclass(frozen=True)
+class BeszelContainerSnapshot:
+    configured: bool
+    available: bool
+    stale: bool
+    message: str | None
+    system_id: str | None
+    observed_at: datetime | None
+    containers: list[BeszelContainer]
+
+
 class BeszelAdapter:
     """Read-only connectivity check for Beszel's PocketBase-backed REST API."""
 
@@ -64,37 +89,97 @@ class BeszelAdapter:
     async def connection(self) -> BeszelConnection:
         if not self.configured:
             return BeszelConnection(False, False, "Beszel is not configured. Add a read-only user and hub URL in Dokploy.")
-        assert self._url is not None
         try:
-            async with httpx.AsyncClient(base_url=self._url, timeout=4.0) as client:
-                token = await self._authenticate(client)
-                systems = await client.get(
-                    "/api/collections/systems/records",
-                    headers={"Authorization": token},
-                    params={"perPage": 1, "filter": f"id='{self._system_id}'"} if self._system_id else {"perPage": 1},
-                )
-                systems.raise_for_status()
-                items = systems.json().get("items") or []
-                if not items:
-                    return BeszelConnection(True, False, "The configured Beszel user cannot see the selected system.", self._system_id)
-                return BeszelConnection(True, True, "Beszel is connected with read-only access.", str(items[0].get("id") or self._system_id))
-        except httpx.HTTPError:
+            system = await self._system()
+            return BeszelConnection(True, True, "Beszel is connected with read-only access.", str(system["id"]))
+        except (httpx.HTTPError, KeyError, ValueError):
             return BeszelConnection(True, False, "Nightwatch could not reach Beszel with the configured read-only account.", self._system_id)
+
+    async def containers(self) -> BeszelContainerSnapshot:
+        if not self.configured:
+            return BeszelContainerSnapshot(False, False, True, "Beszel is not configured.", None, None, [])
+        try:
+            system = await self._system()
+            system_id = str(system["id"])
+            payload = await self._get(
+                "/api/collections/containers/records",
+                {
+                    "page": 1,
+                    "perPage": 2000,
+                    "skipTotal": 1,
+                    "filter": f"system='{system_id}'",
+                    "fields": "id,name,status,health,cpu,memory,net,image,updated,system",
+                    "sort": "-updated",
+                },
+            )
+        except (httpx.HTTPError, KeyError, ValueError):
+            return BeszelContainerSnapshot(
+                True,
+                False,
+                True,
+                "Nightwatch could not read current container records from Beszel.",
+                self._system_id,
+                None,
+                [],
+            )
+        containers: list[BeszelContainer] = []
+        for item in payload.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            observed_at = self._timestamp(item.get("updated"))
+            stale = observed_at is None or (datetime.now(UTC) - observed_at).total_seconds() > 70
+            health = item.get("health")
+            containers.append(
+                BeszelContainer(
+                    id=str(item.get("id") or ""),
+                    name=str(item.get("name") or "").lstrip("/"),
+                    status=str(item.get("status") or ""),
+                    health=health if isinstance(health, int) else 0,
+                    cpu_percent=self._number(item.get("cpu")),
+                    memory_used_bytes=self._mebibytes(item.get("memory")),
+                    network_bytes=self._number_as_int(item.get("net")),
+                    image=str(item.get("image")) if item.get("image") else None,
+                    observed_at=observed_at,
+                    stale=stale,
+                )
+            )
+        observed = max((item.observed_at for item in containers if item.observed_at), default=None)
+        return BeszelContainerSnapshot(
+            True,
+            True,
+            not containers or all(item.stale for item in containers),
+            None if containers else "Beszel reports no containers for the selected system.",
+            system_id,
+            observed,
+            containers,
+        )
+
+    async def _system(self) -> dict[str, Any]:
+        params: dict[str, str | int | float | bool | None] = {
+            "page": 1,
+            "perPage": 2,
+            "fields": "id,info,updated,created",
+        }
+        if self._system_id:
+            params["filter"] = f"id='{self._system_id}'"
+        payload = await self._get(
+            "/api/collections/systems/records",
+            params,
+        )
+        items = [item for item in payload.get("items") or [] if isinstance(item, dict)]
+        if not items:
+            raise ValueError("No accessible Beszel system was found.")
+        if not self._system_id and len(items) != 1:
+            raise ValueError("NW_BESZEL_SYSTEM_ID is required when multiple systems are accessible.")
+        return items[0]
 
     async def host_metrics(self) -> HostMetrics | None:
         if not self.configured:
             return None
         try:
-            payload = await self._get(
-                "/api/collections/systems/records",
-                {"perPage": 1, "filter": f"id='{self._system_id}'"} if self._system_id else {"perPage": 1},
-            )
-        except httpx.HTTPError:
+            record = await self._system()
+        except (httpx.HTTPError, KeyError, ValueError):
             return None
-        items = payload.get("items")
-        if not isinstance(items, list) or not items or not isinstance(items[0], dict):
-            return None
-        record = items[0]
         raw_info = record.get("info")
         info: dict[str, Any] = dict(raw_info) if isinstance(raw_info, dict) else {}
         memory_total = self._gib(info.get("m") or info.get("memory"))
@@ -128,14 +213,14 @@ class BeszelAdapter:
         collection = "container_stats" if container_name else "system_stats"
         since = (datetime.now(UTC) - delta).strftime("%Y-%m-%d %H:%M:%S")
         filters = [f"created > '{since}'", f"type='{record_type}'"]
-        if self._system_id:
-            filters.insert(0, f"system='{self._system_id}'")
         try:
+            system = await self._system()
+            filters.insert(0, f"system='{system['id']}'")
             payload = await self._get(
                 f"/api/collections/{collection}/records",
                 {"page": 1, "perPage": 500, "skipTotal": 1, "filter": " && ".join(filters), "fields": "created,stats", "sort": "created"},
             )
-        except httpx.HTTPError:
+        except (httpx.HTTPError, KeyError, ValueError):
             return TelemetrySeries(range=range_name, available=False, message="Beszel telemetry is unavailable.")
         points: list[TelemetryPoint] = []
         for record in payload.get("items") or []:
@@ -186,6 +271,17 @@ class BeszelAdapter:
     def _mebibytes(cls, value: object) -> int | None:
         number = cls._number(value)
         return round(number * 1024**2) if number is not None else None
+
+    @classmethod
+    def _number_as_int(cls, value: object) -> int | None:
+        number = cls._number(value)
+        return round(number) if number is not None else None
+
+    @staticmethod
+    def _timestamp(value: object) -> datetime | None:
+        if isinstance(value, (int, float)):
+            return datetime.fromtimestamp(value / 1000, UTC)
+        return BeszelAdapter._datetime(value)
 
     @staticmethod
     def _percent(used: int | None, total: int | None) -> float | None:
