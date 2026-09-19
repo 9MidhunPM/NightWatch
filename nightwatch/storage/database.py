@@ -20,7 +20,7 @@ class Base(DeclarativeBase):
 
 
 @event.listens_for(Engine, "connect")
-def set_sqlite_pragmas(dbapi_connection: Any, _: object) -> None:
+def set_sqlite_pragmas(dbapi_connection: Any, _connection_record: object) -> None:
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.execute("PRAGMA journal_mode=WAL")
@@ -29,7 +29,8 @@ def set_sqlite_pragmas(dbapi_connection: Any, _: object) -> None:
 
 
 def ensure_database_directory(database_url: str) -> None:
-    path = database_url.removeprefix("sqlite+aiosqlite:///")
+    prefix = "sqlite+aiosqlite:///"
+    path = database_url.removeprefix(prefix)
     if path != ":memory:":
         Path(path).expanduser().parent.mkdir(parents=True, exist_ok=True)
 
