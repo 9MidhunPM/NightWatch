@@ -65,7 +65,9 @@ class Settings(BaseSettings):
     codex_app_server_timeout_seconds: float = Field(default=25.0, gt=1, le=120)
     investigator_enabled: bool = True
     investigator_max_tool_calls: int = Field(default=12, ge=1, le=15)
-    investigator_timeout_seconds: float = Field(default=45.0, gt=0, le=120)
+    # Strong reasoning models may need several sequential read-only tool calls.
+    # Keep the run bounded while allowing enough time to collect real evidence.
+    investigator_timeout_seconds: float = Field(default=120.0, gt=0, le=120)
     operator_token: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("NW_OPERATOR_TOKEN")
     )
