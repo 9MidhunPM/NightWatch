@@ -8,6 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from nightwatch.models.conversation import AgentConversation, AgentTurn
+from nightwatch.models.deployment_api import DeploymentPlanRequest
 from nightwatch.models.operations_api import (
     AgentActivity,
     AgentConversationDetail,
@@ -89,7 +90,9 @@ class ConversationService:
             await session.commit()
             thread_id = conversation.codex_thread_id
         approval = await self._approve_from_message(conversation_id, message, on_event)
-        prepared = await self._prepare_project_from_message(conversation_id, message, on_event) if approval is None else None
+        prepared = await self._prepare_hosted_deployment_from_message(conversation_id, message, on_event) if approval is None else None
+        if prepared is None and approval is None:
+            prepared = await self._prepare_project_from_message(conversation_id, message, on_event)
         reply = approval if approval is not None else prepared if prepared is not None else await self._operations.answer(message, on_event, conversation_id=conversation_id, codex_thread_id=thread_id)
         reply.pending_actions = await self._deployment.pending_actions(conversation_id)
         async with self._sessions() as session:
@@ -155,7 +158,7 @@ class ConversationService:
         This runs before Codex so an approval card is never based on model prose.
         """
         project_match = re.search(
-            r"\bcreate\s+(?:a\s+)?(?:dokploy\s+)?project\s+(?:called|named)\s+(.+?)(?=\s+(?:and\s+)?create\b|[,.]|$)",
+            r"\bcreate\s+(?:a\s+)?(?:new\s+)?(?:dokploy\s+)?project\s+(?:called|named)\s+(.+?)(?=\s+(?:and\s+)?create\b|[,.]|$)",
             message,
             flags=re.IGNORECASE,
         )
@@ -187,6 +190,94 @@ class ConversationService:
         return AgentMessageResponse(
             answer=f"## Existing action\n\nThe recorded action for {target} is **{plan.get('status', 'unknown')}**. Nightwatch will not create a duplicate.",
             activity=[AgentActivity(tool="nw_prepare_project", label="Inspect Dokploy creation action", detail="An existing action was reused.", arguments={"project_name": project_name, "service_name": service_name}, result={"plan": plan})],
+        )
+
+    async def _prepare_hosted_deployment_from_message(
+        self, conversation_id: str, message: str, on_event: EventSink | None
+    ) -> AgentMessageResponse | None:
+        """Prepare one deploy action when the message requests a hosted service.
+
+        A deployment plan already reconciles its project and application before it
+        configures GitHub, a build type, domain, and deployment.  Preparing a
+        separate blank-service action first drops those requested settings.
+        """
+        project_match = re.search(
+            r"\bcreate\s+(?:a\s+)?(?:new\s+)?(?:dokploy\s+)?project\s+(?:called|named)\s+(.+?)(?=\s+(?:and\s+)?create\b|[,.]|$)",
+            message,
+            flags=re.IGNORECASE,
+        )
+        if project_match is None or not re.search(r"\bdockerfile\b", message, flags=re.IGNORECASE):
+            return None
+        service_match = re.search(
+            r"\bcreate\s+(?:a\s+|an\s+)?(?:(?:simple|blank)\s+)?service\s+(?:called|named)\s+([A-Za-z0-9_.-]+)",
+            message[project_match.end():],
+            flags=re.IGNORECASE,
+        )
+        repository_match = re.search(
+            r"\bconnect(?:\s+it)?\s+to\s+(?:my\s+)?([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?)\s+repository\b",
+            message,
+            flags=re.IGNORECASE,
+        )
+        domain_match = re.search(r"\bhost(?:\s+it)?\s+on\s+([A-Za-z0-9.-]+)", message, flags=re.IGNORECASE)
+        port_match = re.search(r"\b(?:via\s+)?port\s+(\d{1,5})\b", message, flags=re.IGNORECASE)
+        if service_match is None or repository_match is None or domain_match is None or port_match is None:
+            return None
+        project_name = project_match.group(1).strip(" \t\"'`")
+        service_name = service_match.group(1).strip(" \t\"'`")
+        repository_ref = repository_match.group(1)
+        repositories = await self._deployment.repositories()
+        if "/" in repository_ref:
+            owner, repository = repository_ref.split("/", maxsplit=1)
+            selected = next(
+                (item for item in repositories if item.owner.casefold() == owner.casefold() and item.name.casefold() == repository.casefold()),
+                None,
+            )
+        else:
+            matches = [item for item in repositories if item.name.casefold() == repository_ref.casefold()]
+            selected = matches[0] if len(matches) == 1 else None
+        if selected is None:
+            return AgentMessageResponse(
+                answer="## I could not prepare that deployment\n\nThe requested repository was not uniquely available through the connected Dokploy GitHub provider. Use `owner/repository` in the request."
+            )
+        port = int(port_match.group(1))
+        if not 1 <= port <= 65535:
+            return AgentMessageResponse(answer="## I could not prepare that deployment\n\nThe requested application port must be between 1 and 65535.")
+        request = DeploymentPlanRequest(
+            owner=selected.owner,
+            repository=selected.name,
+            branch=selected.default_branch or "main",
+            project_name=project_name,
+            service_name=service_name,
+            build_type="dockerfile",
+            build_path="/",
+            dockerfile="Dockerfile",
+            port=port,
+            domain=domain_match.group(1).lower(),
+            manifest_notes=f"Operator requested Dockerfile deployment for {selected.owner}/{selected.name} on port {port} with domain {domain_match.group(1).lower()}.",
+            conversation_id=conversation_id,
+        )
+        try:
+            plan = await self._deployment.create_plan(request)
+        except ValueError as exc:
+            return AgentMessageResponse(answer=f"## I could not prepare that deployment\n\n{exc}")
+        arguments = {
+            "project_name": project_name,
+            "service_name": service_name,
+            "repository": f"{selected.owner}/{selected.name}",
+            "branch": request.branch,
+            "port": port,
+            "domain": request.domain,
+            "build_type": "dockerfile",
+        }
+        if on_event:
+            await on_event({"type": "tool", "tool": "nw_prepare_deployment", "status": "completed", "arguments": arguments, "result": {"plan": plan.model_dump(mode="json")}})
+        return AgentMessageResponse(
+            answer=(
+                "## Approval required\n\n"
+                f"I prepared one exact hosted-service deployment for **{project_name}** / **{service_name}**. "
+                "Approval will create or reuse the project and service, configure the repository and Dockerfile, attach the domain, and deploy it."
+            ),
+            activity=[AgentActivity(tool="nw_prepare_deployment", label="Prepare hosted Dokploy deployment", detail="One version-bound deployment action is awaiting approval.", arguments=arguments, result={"plan": plan.model_dump(mode="json")})],
         )
 
     @staticmethod

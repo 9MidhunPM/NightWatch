@@ -5,7 +5,11 @@ from sqlalchemy import select
 from nightwatch.adapters.dokploy import DokployAdapter, DokployError
 from nightwatch.models.conversation import AgentConversation, AgentTurn
 from nightwatch.models.deployment import DeploymentPlan
-from nightwatch.models.deployment_api import DeploymentPlanRequest, InferredDeploymentRequest
+from nightwatch.models.deployment_api import (
+    DeploymentPlanRequest,
+    GithubRepository,
+    InferredDeploymentRequest,
+)
 from nightwatch.models.project_plan import ProjectPlan
 from nightwatch.policy import PolicyDecision, PolicyEngine
 from nightwatch.services.conversation_service import ConversationService
@@ -66,6 +70,46 @@ def test_deployment_request_rejects_a_repository_from_another_owner() -> None:
             port=80,
             manifest_notes="Dockerfile exposes port 80.",
         )
+
+
+class _HostedServicePlan:
+    def model_dump(self, *, mode: str) -> dict[str, str]:
+        assert mode == "json"
+        return {"id": "hosted-plan"}
+
+
+class _HostedServiceDeployment:
+    def __init__(self) -> None:
+        self.request: DeploymentPlanRequest | None = None
+
+    async def repositories(self) -> list[GithubRepository]:
+        return [GithubRepository(owner="9MidhunPM", name="prompt-to-website", default_branch="main")]
+
+    async def create_plan(self, request: DeploymentPlanRequest) -> _HostedServicePlan:
+        self.request = request
+        return _HostedServicePlan()
+
+
+@pytest.mark.anyio
+async def test_hosted_project_message_creates_one_deployment_plan() -> None:
+    deployment = _HostedServiceDeployment()
+    conversations = ConversationService(None, _UnusedOperations(), deployment)  # type: ignore[arg-type]
+
+    reply = await conversations._prepare_hosted_deployment_from_message(
+        "conversation-1",
+        "create a new project called nightwatch-test666 and create a simple service called eee in it and connect it to my prompt-to-website repository and host it on Nightwatch-test.midhunpm.in via port 80 using the dockerfile",
+        None,
+    )
+
+    assert reply is not None
+    assert deployment.request is not None
+    assert deployment.request.project_name == "nightwatch-test666"
+    assert deployment.request.service_name == "eee"
+    assert deployment.request.owner == "9MidhunPM"
+    assert deployment.request.repository == "prompt-to-website"
+    assert deployment.request.port == 80
+    assert deployment.request.domain == "nightwatch-test.midhunpm.in"
+    assert deployment.request.build_type == "dockerfile"
 
 
 def test_dokploy_actions_are_explicitly_approval_gated() -> None:
