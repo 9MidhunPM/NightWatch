@@ -4,7 +4,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Literal, cast
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from nightwatch.models.operations_api import (
@@ -62,13 +62,13 @@ async def get_conversation(request: Request, conversation_id: str) -> AgentConve
     return conversation
 
 
-@router.post("/agent/conversations/{conversation_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/agent/conversations/{conversation_id}/archive", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
 async def archive_conversation(request: Request, conversation_id: str) -> None:
     if not await conversations(request).archive(conversation_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation was not found.")
 
 
-@router.delete("/agent/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/agent/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
 async def delete_conversation(request: Request, conversation_id: str) -> None:
     if not await conversations(request).delete(conversation_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Conversation has active linked plans or no longer exists.")

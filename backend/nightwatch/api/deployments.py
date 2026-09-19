@@ -3,7 +3,7 @@ from __future__ import annotations
 from hmac import compare_digest
 from typing import cast
 
-from fastapi import APIRouter, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Header, HTTPException, Query, Request, Response, status
 
 from nightwatch.adapters.dokploy import DokployError
 from nightwatch.config import Settings
@@ -106,13 +106,13 @@ async def retry_plan(request: Request, plan_id: str, authorization: str | None =
     return plan
 
 
-@router.delete("/plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
 async def delete_plan(request: Request, plan_id: str, authorization: str | None = Header(default=None)) -> None:
     if not _approval_authorized(request, authorization) or not await service(request).delete_plan(plan_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only terminal deployment plans can be deleted.")
 
 
-@router.delete("/project-plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/project-plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
 async def delete_project_plan(request: Request, plan_id: str, authorization: str | None = Header(default=None)) -> None:
     if not _approval_authorized(request, authorization) or not await service(request).delete_project_plan(plan_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only terminal project plans can be deleted.")
