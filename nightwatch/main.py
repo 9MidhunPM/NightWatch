@@ -19,6 +19,7 @@ from nightwatch.config import Settings, get_settings
 from nightwatch.events.bus import EventBus
 from nightwatch.events.models import RealtimeEvent
 from nightwatch.security.access import RealtimeTicketRegistry, valid_frontend_token
+from nightwatch.storage.database import create_database, verify_database
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -26,6 +27,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        engine, session_factory = create_database(active_settings.database_url)
+        app.state.database_engine = engine
+        app.state.session_factory = session_factory
+        await verify_database(engine)
+
         async def heartbeat() -> None:
             while True:
                 await asyncio.sleep(active_settings.heartbeat_interval_seconds)
@@ -38,6 +44,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             heartbeat_task.cancel()
             with suppress(asyncio.CancelledError):
                 await heartbeat_task
+            await engine.dispose()
 
     app = FastAPI(
         title=active_settings.application_name,
