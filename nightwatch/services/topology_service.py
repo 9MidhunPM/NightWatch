@@ -111,8 +111,12 @@ class TopologyService:
 
     @staticmethod
     def _build(
-        host: InfrastructureNode, inventory: DockerInventory, routes: list[TraefikRoute], project_names: dict[str, str]
+        host: InfrastructureNode,
+        inventory: DockerInventory,
+        routes: list[TraefikRoute],
+        project_names: dict[str, str] | None = None,
     ) -> TopologySnapshot:
+        project_names = project_names or {}
         nodes: list[InfrastructureNode] = [host]
         edges: list[InfrastructureEdge] = []
         container_ids: dict[str, str] = {}
