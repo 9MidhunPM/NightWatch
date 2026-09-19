@@ -137,6 +137,7 @@ class WorldService:
         self._probed = 0.0
         self._limit = asyncio.Semaphore(4)
         self._beszel_runtime_state: tuple[bool, bool, int] | None = None
+        self._resource_failures: dict[str, int] = {}
 
     async def restore(self) -> None:
         async with self.sessions() as session:
@@ -221,6 +222,7 @@ class WorldService:
                 )
                 resource.health = aggregate_health(states)
             project.health = aggregate_project_health([r.health for r in project.resources])
+        await self._reconcile_resource_incidents(snapshot)
         observed = [r for p in snapshot.projects for r in p.resources if r.runtime_state != "not observed"]
         total = sum(len(p.resources) for p in snapshot.projects)
         snapshot.coverage = round(len(observed) / total * 100, 1) if total else 100.0
@@ -242,6 +244,27 @@ class WorldService:
                 payload={"source": "world", "projects": len(snapshot.projects)},
             )
         )
+
+    async def _reconcile_resource_incidents(self, snapshot: WorldSnapshot) -> None:
+        """Turn repeated Beszel-backed stopped/unhealthy states into visible incidents."""
+        for project in snapshot.projects:
+            for resource in project.resources:
+                key = f"world:resource:{resource.id}"
+                if resource.health in {"UNHEALTHY", "STOPPED"}:
+                    count = self._resource_failures.get(key, 0) + 1
+                    self._resource_failures[key] = count
+                    if count >= 3:
+                        await self.incidents.report_failure(
+                            key=key,
+                            title=f"Service unavailable: {resource.name}",
+                            severity="CRITICAL",
+                            trigger={"type": "BESZEL_RESOURCE_UNHEALTHY", "health": resource.health, "project": project.name},
+                            affected_resource_ids=[resource.id],
+                            observation_summary=f"Beszel observed {resource.name} as {resource.health.lower()} for {count} consecutive checks.",
+                            observation_data={"health": resource.health, "runtime_state": resource.runtime_state, "observed_at": resource.observed_at},
+                        )
+                elif resource.health == "HEALTHY" and self._resource_failures.pop(key, 0) >= 3:
+                    await self.incidents.report_recovery(key, f"Beszel observed {resource.name} healthy again.")
 
     async def discover(self) -> list[WorldProject]:
         raw = self.dokploy._projects(await self.dokploy._async_request("GET", "/api/project.all"))

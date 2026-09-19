@@ -221,6 +221,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             model=active_settings.automatic_model,
             mini_model=active_settings.automatic_mini_model,
             max_tool_calls=active_settings.investigator_max_tool_calls,
+            max_output_tokens=active_settings.investigator_max_output_tokens,
             timeout_seconds=active_settings.investigator_timeout_seconds,
             on_root_cause_confirmed=app.state.remediation_service.plan_for_incident,
         )
@@ -232,9 +233,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             demo_url=active_settings.demo_url or active_settings.public_demo_url,
             timeout_seconds=active_settings.monitor_timeout_seconds,
             failure_threshold=active_settings.monitor_failure_threshold,
-            investigator_service=(
-                app.state.investigator_service if active_settings.investigator_enabled else None
-            ),
+            investigator_service=None,
         )
         world_task = (
             asyncio.create_task(app.state.world_service.run(), name="nightwatch-world")

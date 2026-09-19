@@ -68,6 +68,12 @@ async def archive_conversation(request: Request, conversation_id: str) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation was not found.")
 
 
+@router.delete("/agent/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_conversation(request: Request, conversation_id: str) -> None:
+    if not await conversations(request).delete(conversation_id):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Conversation has active linked plans or no longer exists.")
+
+
 @router.post("/agent/stream")
 async def agent_stream(request: Request, payload: AgentMessageRequest) -> StreamingResponse:
     """Stream observable progress, never model reasoning, before the final answer."""

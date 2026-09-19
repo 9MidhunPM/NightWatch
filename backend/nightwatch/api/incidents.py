@@ -1,6 +1,6 @@
 import asyncio
 from hmac import compare_digest
-from typing import cast
+from typing import Any, cast
 
 from fastapi import APIRouter, Header, HTTPException, Request, status
 
@@ -24,6 +24,10 @@ def executor(request: Request) -> RepairExecutionService:
     return cast(RepairExecutionService, request.app.state.repair_execution_service)
 
 
+def investigator(request: Request) -> Any:
+    return request.app.state.investigator_service
+
+
 @router.get("", response_model=list[IncidentResponse])
 async def get_incidents(request: Request) -> list[IncidentResponse]:
     return await service(request).list_incidents()
@@ -35,6 +39,19 @@ async def get_incident(request: Request, incident_id: str) -> IncidentResponse:
     if incident is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident was not found.")
     return incident
+
+
+@router.post("/{incident_id}/investigate", status_code=status.HTTP_202_ACCEPTED)
+async def investigate_incident(request: Request, incident_id: str, authorization: str | None = Header(default=None)) -> dict[str, str]:
+    configured_token = settings(request).frontend_token
+    forwarded = request.headers.get("x-nightwatch-frontend")
+    if configured_token is None or forwarded != configured_token.get_secret_value():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized.")
+    service = investigator(request)
+    if service is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Investigation is unavailable.")
+    service.start(incident_id)
+    return {"status": "INVESTIGATION_REQUESTED"}
 
 
 @router.post("/repair-plans/{plan_id}/approval", response_model=IncidentResponse)

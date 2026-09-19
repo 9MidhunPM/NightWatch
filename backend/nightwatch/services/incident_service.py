@@ -154,14 +154,15 @@ class IncidentService:
     async def begin_investigation(self, incident_id: str) -> IncidentResponse | None:
         async with self._session_factory() as session:
             incident = await session.get(Incident, incident_id)
-            if incident is None or incident.state != "DETECTED":
+            if incident is None or incident.state not in {"DETECTED", "HUMAN_REQUIRED"}:
                 return None
+            restarting = incident.state == "HUMAN_REQUIRED"
             incident.state = "INVESTIGATING"
             incident.updated_at = datetime.now(UTC)
             self._timeline(
                 session,
                 incident.id,
-                "INVESTIGATION_STARTED",
+                "INVESTIGATION_RESTARTED" if restarting else "INVESTIGATION_STARTED",
                 "Investigator started read-only evidence collection.",
                 {},
             )

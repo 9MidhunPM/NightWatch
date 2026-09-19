@@ -3,10 +3,10 @@ import {authenticated,backendHeaders,backendURL,noStore} from '@/lib/server';
 import {originAllowed} from '@/lib/session';
 export const runtime='nodejs';export const dynamic='force-dynamic';
 const reads=[/^world$/, /^health$/, /^host(?:\/(?:metrics|capabilities))?$/, /^docker\/(?:status|containers(?:\/[\w.-]+)?|networks)$/, /^topology$/, /^incidents(?:\/[\w-]+)?$/, /^resources$/, /^agent\/(?:status|conversations(?:\/[\w-]+)?)$/, /^observability\/beszel$/, /^telemetry\/(?:host|resource)$/, /^reports\/current(?:\.csv)?$/, /^deployments\/(?:status|repositories(?:\/[\w.-]+\/[\w.-]+\/branches)?|plans|project-plans(?:\/[\w-]+)?)$/];
-const writes=[/^agent\/(?:messages|stream|conversations(?:\/[\w-]+\/archive)?)$/, /^deployments\/plans$/, /^deployments\/(?:plans|project-plans)\/[\w-]+\/approval$/, /^incidents\/repair-plans\/[\w-]+\/approval$/, /^incidents\/repair-actions\/[\w-]+\/rollback$/];
+const writes=[/^agent\/(?:messages|stream|conversations(?:\/[\w-]+(?:\/archive)?)?)$/, /^deployments\/plans$/, /^deployments\/(?:plans|project-plans)\/[\w-]+(?:\/(?:approval|retry))?$/, /^incidents\/[\w-]+\/investigate$/, /^incidents\/repair-plans\/[\w-]+\/approval$/, /^incidents\/repair-actions\/[\w-]+\/rollback$/];
 async function proxy(req:NextRequest,{params}:{params:Promise<{path:string[]}>}){
  if(!await authenticated())return Response.json({message:'Sign in to continue'},{status:401,headers:noStore});
- const path=(await params).path.join('/');const mutation=req.method==='POST';
+ const path=(await params).path.join('/');const mutation=req.method==='POST'||req.method==='DELETE';
  if(!(mutation?writes:reads).some(rule=>rule.test(path)))return Response.json({message:'Unknown endpoint'},{status:404});
  if(mutation&&!originAllowed(req.headers.get('origin')))return new Response(null,{status:403});
  let body:string|undefined;
@@ -19,4 +19,4 @@ async function proxy(req:NextRequest,{params}:{params:Promise<{path:string[]}>})
  clearTimeout(timer);return new Response(response.status===204?null:await response.arrayBuffer(),{status:response.status,headers:{...noStore,'Content-Type':type,...(path.endsWith('.csv')?{'Content-Disposition':'attachment; filename="nightwatch-report.csv"'}:{})}});
  }catch{clearTimeout(timer);return Response.json({message:'The backend could not be reached. Try again shortly.'},{status:502,headers:noStore});}
 }
-export {proxy as GET,proxy as POST};
+export {proxy as GET,proxy as POST,proxy as DELETE};

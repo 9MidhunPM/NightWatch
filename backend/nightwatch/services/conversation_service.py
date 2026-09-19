@@ -4,7 +4,7 @@ import re
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from nightwatch.models.conversation import AgentConversation, AgentTurn
@@ -59,6 +59,18 @@ class ConversationService:
             if conversation is None:
                 return False
             conversation.archived_at = datetime.now(UTC)
+            await session.commit()
+            return True
+
+    async def delete(self, conversation_id: str) -> bool:
+        async with self._sessions() as session:
+            conversation = await session.get(AgentConversation, conversation_id)
+            if conversation is None:
+                return False
+            if not await self._deployment.delete_for_conversation(conversation_id, session):
+                return False
+            await session.execute(delete(AgentTurn).where(AgentTurn.conversation_id == conversation_id))
+            await session.delete(conversation)
             await session.commit()
             return True
 

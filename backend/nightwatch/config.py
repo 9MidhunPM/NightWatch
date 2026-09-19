@@ -54,11 +54,11 @@ class Settings(BaseSettings):
         default=None, validation_alias=AliasChoices("NW_DEMO_URL", "NIGHTWATCH_DEMO_URL")
     )
     log_level: str = "INFO"
-    # Operator chat stays on Luna. Automatic investigations use the bounded
-    # OpenAI models below so startup and background work do not consume chat capacity.
+    # Operator chat stays on Luna. Manual incident investigation uses a small,
+    # bounded model and never runs as a background cost.
     codex_model: Literal["gpt-5.6-luna"] = "gpt-5.6-luna"
-    automatic_model: Literal["gpt-4o"] = "gpt-4o"
-    automatic_mini_model: Literal["gpt-4o-mini"] = "gpt-4o-mini"
+    automatic_model: Literal["gpt-5.4-mini"] = "gpt-5.4-mini"
+    automatic_mini_model: Literal["gpt-5.4-mini"] = "gpt-5.4-mini"
     codex_api_key: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("OPENAI_API_KEY", "NW_CODEX_API_KEY")
     )
@@ -66,10 +66,9 @@ class Settings(BaseSettings):
     codex_app_server_command: str = "codex"
     codex_app_server_timeout_seconds: float = Field(default=25.0, gt=1, le=120)
     investigator_enabled: bool = True
-    investigator_max_tool_calls: int = Field(default=12, ge=1, le=15)
-    # Strong reasoning models may need several sequential read-only tool calls.
-    # Keep the run bounded while allowing enough time to collect real evidence.
-    investigator_timeout_seconds: float = Field(default=120.0, gt=0, le=120)
+    investigator_max_tool_calls: int = Field(default=3, ge=1, le=3)
+    investigator_max_output_tokens: int = Field(default=1200, ge=256, le=1200)
+    investigator_timeout_seconds: float = Field(default=45.0, gt=0, le=60)
     operator_token: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("NW_OPERATOR_TOKEN")
     )

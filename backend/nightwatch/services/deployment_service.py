@@ -9,7 +9,7 @@ from typing import Literal
 from urllib.parse import urlparse
 
 import httpx
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -500,6 +500,40 @@ class DeploymentService:
         asyncio.create_task(self._execute(plan_id, retry=True), name=f"nightwatch-deploy-retry-{plan_id}")
         return response
 
+    async def delete_plan(self, plan_id: str) -> bool:
+        async with self._sessions() as session:
+            plan = await session.get(DeploymentPlan, plan_id)
+            if plan is None or plan.status not in {"FAILED", "REJECTED", "SUPERSEDED", "VERIFIED"}:
+                return False
+            await session.execute(delete(DeploymentApproval).where(DeploymentApproval.deployment_plan_id == plan_id))
+            await session.execute(delete(DeploymentExecution).where(DeploymentExecution.deployment_plan_id == plan_id))
+            await session.delete(plan)
+            await session.commit()
+            return True
+
+    async def delete_project_plan(self, plan_id: str) -> bool:
+        async with self._sessions() as session:
+            plan = await session.get(ProjectPlan, plan_id)
+            if plan is None or plan.status not in {"FAILED", "REJECTED", "SUPERSEDED", "VERIFIED"}:
+                return False
+            await session.delete(plan)
+            await session.commit()
+            return True
+
+    async def delete_for_conversation(self, conversation_id: str, session: AsyncSession) -> bool:
+        deployments = list((await session.scalars(select(DeploymentPlan).where(DeploymentPlan.conversation_id == conversation_id))).all())
+        projects = list((await session.scalars(select(ProjectPlan).where(ProjectPlan.conversation_id == conversation_id))).all())
+        terminal = {"FAILED", "REJECTED", "SUPERSEDED", "VERIFIED"}
+        if any(plan.status not in terminal for plan in deployments) or any(plan.status not in terminal for plan in projects):
+            return False
+        for plan in deployments:
+            await session.execute(delete(DeploymentApproval).where(DeploymentApproval.deployment_plan_id == plan.id))
+            await session.execute(delete(DeploymentExecution).where(DeploymentExecution.deployment_plan_id == plan.id))
+            await session.delete(plan)
+        for project_plan in projects:
+            await session.delete(project_plan)
+        return True
+
     async def _execute(self, plan_id: str, *, retry: bool) -> None:
         async with self._execution_lock:
             async with self._sessions() as session:
@@ -626,7 +660,7 @@ class DeploymentService:
 
     def _application_configuration(self, plan: DeploymentPlan) -> dict[str, object]:
         return {
-            "sourceType": "github", "port": plan.port, "autoDeploy": False,
+            "sourceType": "github", "autoDeploy": False,
         }
 
     def _github_configuration(self, plan: DeploymentPlan) -> dict[str, object]:
@@ -641,7 +675,7 @@ class DeploymentService:
         expected = {
             "sourceType": "github", "githubId": self._require_github_id(), "owner": plan.owner,
             "repository": plan.repository, "branch": plan.branch, "buildType": plan.build_type,
-            "port": plan.port, "autoDeploy": False,
+            "autoDeploy": False,
         }
         mismatches = [field for field, value in expected.items() if application.get(field) != value]
         if plan.dockerfile is not None and application.get("dockerfile") != plan.dockerfile:

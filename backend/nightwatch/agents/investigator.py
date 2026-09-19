@@ -53,8 +53,9 @@ class InvestigatorService:
         *,
         api_key: str | None,
         model: str,
-        mini_model: str = "gpt-4o-mini",
+        mini_model: str = "gpt-5.4-mini",
         max_tool_calls: int,
+        max_output_tokens: int = 1200,
         timeout_seconds: float,
         on_root_cause_confirmed: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
@@ -63,6 +64,7 @@ class InvestigatorService:
         self._model = model
         self._mini_model = mini_model
         self._max_tool_calls = max_tool_calls
+        self._max_output_tokens = max_output_tokens
         self._timeout_seconds = timeout_seconds
         self._client = AsyncOpenAI(api_key=api_key, timeout=timeout_seconds) if api_key else None
         self._running: set[str] = set()
@@ -213,7 +215,7 @@ class InvestigatorService:
             parallel_tool_calls=False,
             # Four evidence-backed hypotheses can legitimately exceed 1,200
             # tokens once citations and the recommended action are included.
-            max_output_tokens=4000,
+            max_output_tokens=self._max_output_tokens,
             text_format=InvestigationOutcome,
         )
         # Parsed response subclasses contain richer generic values than the

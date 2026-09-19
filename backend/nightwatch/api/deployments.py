@@ -106,6 +106,18 @@ async def retry_plan(request: Request, plan_id: str, authorization: str | None =
     return plan
 
 
+@router.delete("/plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_plan(request: Request, plan_id: str, authorization: str | None = Header(default=None)) -> None:
+    if not _approval_authorized(request, authorization) or not await service(request).delete_plan(plan_id):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only terminal deployment plans can be deleted.")
+
+
+@router.delete("/project-plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project_plan(request: Request, plan_id: str, authorization: str | None = Header(default=None)) -> None:
+    if not _approval_authorized(request, authorization) or not await service(request).delete_project_plan(plan_id):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only terminal project plans can be deleted.")
+
+
 @router.post("/project-plans/{plan_id}/approval")
 async def approve_project_plan(
     request: Request, plan_id: str, payload: DeploymentApprovalRequest, authorization: str | None = Header(default=None)
