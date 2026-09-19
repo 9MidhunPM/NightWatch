@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 
+from nightwatch.api.events import router as events_router
 from nightwatch.config import Settings, get_settings
 from nightwatch.events.bus import EventBus
 from nightwatch.security.access import RealtimeTicketRegistry, valid_frontend_token
@@ -65,6 +66,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/health")
     async def health() -> dict[str, str]:
         return {"status": "ok", "service": "nightwatch"}
+
+    app.include_router(events_router, prefix="/api")
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, _: RequestValidationError) -> JSONResponse:
