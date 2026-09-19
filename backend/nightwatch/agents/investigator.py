@@ -108,6 +108,19 @@ class InvestigatorService:
                 incident_id,
                 "Investigation provider rejected the request. Retry after checking model and schema compatibility.",
             )
+        except ValidationError as exc:
+            logger.exception(
+                "investigation result validation failed",
+                extra={
+                    "component": "investigator",
+                    "incident_id": incident_id,
+                    "result": exc.errors(include_input=False, include_url=False)[:8],
+                },
+            )
+            await self._incident_service.investigation_failed(
+                incident_id,
+                "Investigation returned evidence that did not match the incident schema.",
+            )
         except Exception:
             logger.exception(
                 "investigation failed",
