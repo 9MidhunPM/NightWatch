@@ -6,3 +6,5 @@ export function useData<T>(path:string){const[data,setData]=useState<T|null>(nul
 export const timeAgo=(value:string|null|undefined)=>{if(!value)return 'Not observed';const seconds=Math.max(0,Math.floor((Date.now()-new Date(value).getTime())/1000));return seconds<10?'Just now':seconds<60?`${seconds}s ago`:seconds<3600?`${Math.floor(seconds/60)}m ago`:`${Math.floor(seconds/3600)}h ago`;};
 export const label=(value:string)=>value.toLowerCase().replaceAll('_',' ').replace(/^\w/,c=>c.toUpperCase());
 export const color=(state:string)=>state==='UNHEALTHY'?'#f47d7a':state==='DEGRADED'?'#eab970':state==='HEALTHY'||state==='PROTECTED'?'#76dcb0':state==='CHANGING'?'#83b9ee':'#8793a3';
+export const formatBytes=(value:number|null|undefined)=>{if(value===null||value===undefined)return '—';const units=['B','KB','MB','GB','TB'];let amount=value,index=0;while(Math.abs(amount)>=1000&&index<units.length-1){amount/=1000;index++;}return `${amount>=10||index===0?amount.toFixed(0):amount.toFixed(1)} ${units[index]}`;};
+export const formatPercent=(value:number|null|undefined)=>value===null||value===undefined?'—':`${value.toFixed(value>=10?0:1)}%`;
