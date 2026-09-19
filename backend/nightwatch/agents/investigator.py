@@ -6,7 +6,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
-from openai import AsyncOpenAI
+from openai import APIStatusError, AsyncOpenAI
 from pydantic import BaseModel, Field, ValidationError
 
 from nightwatch.models.incident_api import IncidentResponse
@@ -87,6 +87,27 @@ class InvestigatorService:
                 return
             async with asyncio.timeout(self._timeout_seconds):
                 await self._run_loop(incident)
+        except APIStatusError as exc:
+            # Keep provider failures actionable without logging request input,
+            # credentials, headers, or the full response body.
+            detail: dict[str, object] = {"status_code": exc.status_code}
+            if isinstance(exc.body, dict):
+                for key in ("type", "code", "param", "message"):
+                    value = exc.body.get(key)
+                    if isinstance(value, (str, int, float, bool)):
+                        detail[key] = redact(str(value))[:600]
+            logger.exception(
+                "investigation provider request failed",
+                extra={
+                    "component": "investigator",
+                    "incident_id": incident_id,
+                    "result": detail,
+                },
+            )
+            await self._incident_service.investigation_failed(
+                incident_id,
+                "Investigation provider rejected the request. Retry after checking model and schema compatibility.",
+            )
         except Exception:
             logger.exception(
                 "investigation failed",
