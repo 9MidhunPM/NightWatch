@@ -134,6 +134,14 @@ class InvestigatorService:
                     str(response.get("parsed_outcome") or response.get("output_text", ""))
                 )
                 await self._finish(incident.id, outcome)
+                logger.info(
+                    "investigation completed",
+                    extra={
+                        "component": "investigator",
+                        "incident_id": incident.id,
+                        "result": outcome.status,
+                    },
+                )
                 return
             inputs.extend(self._replay_output(response.get("output", [])))
             for call in calls:
@@ -191,7 +199,10 @@ class InvestigatorService:
             max_output_tokens=1200,
             text_format=InvestigationOutcome,
         )
-        payload: dict[str, Any] = response.model_dump(exclude_none=True)
+        # Parsed response subclasses contain richer generic values than the
+        # base SDK response union. The values serialize correctly; disabling
+        # Pydantic's union warning keeps production logs focused on failures.
+        payload: dict[str, Any] = response.model_dump(exclude_none=True, warnings=False)
         if response.output_parsed is not None:
             payload["parsed_outcome"] = response.output_parsed.model_dump_json()
         return payload
