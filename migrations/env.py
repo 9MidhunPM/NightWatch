@@ -4,6 +4,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from nightwatch.config import get_settings
+from nightwatch.models.server import Server  # noqa: F401
 from nightwatch.storage.database import Base
 
 config = context.config
