@@ -7,12 +7,13 @@ NightWatch is a backend control plane for observable, evidence-gated service rec
 Install Python 3.12 and uv, copy `.env.example` to `.env`, then run:
 
 ```sh
+cd backend
 uv sync --extra dev
 uv run alembic upgrade head
 uv run uvicorn nightwatch.main:app --reload
 ```
 
-Validate with `uv run ruff check .`, `uv run mypy nightwatch`, and `uv run pytest`.
+From `backend/`, validate with `uv run ruff check nightwatch ../tests`, `uv run mypy nightwatch`, and `uv run pytest ../tests ../tests/backend`.
 
 ## Deployment boundary
 
