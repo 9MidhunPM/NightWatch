@@ -63,6 +63,23 @@ def test_dynamic_tool_calls_are_executed_by_typed_backend_broker() -> None:
     asyncio.run(exercise())
 
 
+def test_new_threads_always_request_luna() -> None:
+    async def exercise() -> None:
+        server = CodexAppServer("codex", "test-key", timeout_seconds=5)
+        calls: list[tuple[str, dict[str, object]]] = []
+
+        async def request(method: str, params: dict[str, object]) -> dict[str, object]:
+            calls.append((method, params))
+            return {"thread": {"id": "luna-thread"}}
+
+        server._request = request  # type: ignore[method-assign]
+        assert await server._ensure_thread("conversation", None) == "luna-thread"
+        assert calls[0][0] == "thread/start"
+        assert calls[0][1]["model"] == "gpt-5.6-luna"
+
+    asyncio.run(exercise())
+
+
 def test_streamed_agent_message_delta_is_retained_until_turn_completion() -> None:
     class Process:
         def __init__(self, stdout: asyncio.StreamReader) -> None:

@@ -155,6 +155,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.event_bus,
             app.state.host_service,
             app.state.beszel_service,
+            app.state.topology_service,
         )
         await app.state.world_service.restore()
         tool_broker = OperationsToolBroker(

@@ -4,6 +4,7 @@ import asyncio
 import logging
 import re
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
@@ -17,6 +18,8 @@ from nightwatch.adapters.dokploy import DokployAdapter, DokployError
 from nightwatch.adapters.domain_probe import probe_domain
 from nightwatch.events.bus import EventBus
 from nightwatch.events.models import EventType, RealtimeEvent
+from nightwatch.models.docker_api import DockerContainer
+from nightwatch.models.traefik_api import TraefikRoute
 from nightwatch.models.world import (
     DeploymentSummary,
     DomainCheck,
@@ -33,6 +36,7 @@ from nightwatch.services.beszel_service import BeszelService
 from nightwatch.services.docker_service import DockerService
 from nightwatch.services.host_service import HostService
 from nightwatch.services.incident_service import IncidentService
+from nightwatch.services.topology_service import TopologyService
 
 logger = logging.getLogger("nightwatch.world")
 SERVICE_TYPES = {
@@ -121,10 +125,11 @@ class WorldService:
         bus: EventBus,
         host: HostService | None = None,
         beszel: BeszelService | None = None,
+        topology: TopologyService | None = None,
     ) -> None:
         self.sessions, self.dokploy, self.docker = sessions, dokploy, docker
         self.incidents, self.bus = incidents, bus
-        self.host, self.beszel = host, beszel
+        self.host, self.beszel, self.topology = host, beszel, topology
         self.current = WorldSnapshot(
             generated_at=datetime.now(UTC), message="Discovering infrastructure"
         )
@@ -405,6 +410,7 @@ class WorldService:
             inventory = None
         else:
             snapshot.sources["docker"] = "available" if inventory else "unavailable"
+        routes = await self._routes()
         for project in snapshot.projects:
             for resource in project.resources:
                 resource.evidence = [
@@ -432,12 +438,17 @@ class WorldService:
                         or c.compose_service == resource.compose_service
                     )
                 ]
+                self._merge_route_domains(resource, docker_matches, routes)
                 resource.networks = sorted({network for c in docker_matches for network in c.networks})
                 matches = [
                     item
                     for item in (runtime.containers if runtime and runtime.available else [])
-                    if self._beszel_matches(resource, item)
+                    if self._beszel_matches(resource, item, docker_matches)
                 ]
+                evidence_message = runtime.message if runtime else "Beszel runtime telemetry is unavailable."
+                if runtime and runtime.available:
+                    evidence_message = f"Beszel matched {len(matches)} fresh container record(s) through Dokploy and Docker identity."
+                resource.evidence[1].message = evidence_message
                 resource.container_ids = [f"beszel:{item.id}" for item in matches if item.id]
                 if matches and not all(item.stale for item in matches):
                     fresh = [item for item in matches if not item.stale]
@@ -461,10 +472,15 @@ class WorldService:
                     resource.health = "UNAVAILABLE"
 
     @staticmethod
-    def _beszel_matches(resource: WorldResource, container: BeszelContainer) -> bool:
+    def _beszel_matches(resource: WorldResource, container: BeszelContainer, docker_matches: Sequence[DockerContainer] = ()) -> bool:
         if not resource.app_name or not container.name:
             return False
         name = container.name.lstrip("/").casefold()
+        for docker in docker_matches:
+            docker_name = str(getattr(docker, "name", "")).lstrip("/").casefold()
+            docker_id = str(getattr(docker, "id", "")).casefold()
+            if name == docker_name or (container.id and docker_id.startswith(container.id.casefold())):
+                return True
         app_name = resource.app_name.casefold()
         prefixes = [
             f"{app_name}-{resource.compose_service.casefold()}"
@@ -472,6 +488,29 @@ class WorldService:
             else app_name
         ]
         return any(name == prefix or name.startswith((prefix + ".", prefix + "-", prefix + "_")) for prefix in prefixes)
+
+    async def _routes(self) -> list[TraefikRoute]:
+        if self.topology is None:
+            return []
+        try:
+            return list(await self.topology.traefik_routes())
+        except Exception:
+            logger.info("Traefik route observation unavailable", exc_info=True)
+            return []
+
+    @staticmethod
+    def _merge_route_domains(resource: WorldResource, docker_matches: Sequence[DockerContainer], routes: Sequence[TraefikRoute]) -> None:
+        container_ids = {str(getattr(container, "id", "")) for container in docker_matches}
+        container_names = {str(getattr(container, "name", "")).lstrip("/") for container in docker_matches}
+        known = {check.url for check in resource.domains}
+        for route in routes:
+            if str(getattr(route, "container_id", "")) not in container_ids and str(getattr(route, "container_name", "")).lstrip("/") not in container_names:
+                continue
+            for host in getattr(route, "domains", []):
+                url = f"https://{str(host).strip().lower()}/"
+                if host and url not in known:
+                    resource.domains.append(DomainCheck(url=url, target_service=getattr(route, "service_name", None)))
+                    known.add(url)
 
     @staticmethod
     def _beszel_health(containers: list[BeszelContainer]) -> str:

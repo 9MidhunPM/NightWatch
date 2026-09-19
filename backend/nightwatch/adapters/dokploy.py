@@ -266,7 +266,9 @@ class DokployAdapter:
         data = result.get("data") if isinstance(result, dict) else payload.get("data")
         if isinstance(data, dict) and "json" in data:
             return data["json"]
-        return data
+        # Dokploy's REST endpoints return the resource directly, while tRPC
+        # endpoints wrap it in data.json. Preserve both response shapes.
+        return data if data is not None else payload
 
 
 class DokployError(RuntimeError):

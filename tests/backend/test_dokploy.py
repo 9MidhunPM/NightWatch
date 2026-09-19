@@ -31,3 +31,12 @@ def test_extracts_trpc_service_detail_app_name() -> None:
 def test_accepts_direct_dokploy_list_payloads() -> None:
     payload = [{"name": "NightWatch", "owner": {"login": "9MidhunPM"}}]
     assert DokployAdapter._data(payload) == payload
+
+
+def test_accepts_direct_dokploy_service_detail_payloads() -> None:
+    payload = {
+        "applicationId": "app-1",
+        "appName": "prism-api-hammpv",
+        "domains": [{"host": "prism.midhunpm.in", "https": True}],
+    }
+    assert DokployAdapter._data(payload) == payload

@@ -105,6 +105,8 @@ class CodexAppServer:
                 'sandbox_mode="read-only"',
                 "-c",
                 'approval_policy="never"',
+                "-c",
+                'model="gpt-5.6-luna"',
                 cwd=str(workspace),
                 env=environment,
                 stdin=asyncio.subprocess.PIPE,
