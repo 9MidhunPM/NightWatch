@@ -209,7 +209,9 @@ class InvestigatorService:
             input=inputs,  # type: ignore[arg-type]
             tools=self._tools.definitions(),  # type: ignore[arg-type]
             parallel_tool_calls=False,
-            max_output_tokens=1200,
+            # Four evidence-backed hypotheses can legitimately exceed 1,200
+            # tokens once citations and the recommended action are included.
+            max_output_tokens=4000,
             text_format=InvestigationOutcome,
         )
         # Parsed response subclasses contain richer generic values than the
