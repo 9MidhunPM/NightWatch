@@ -10,6 +10,37 @@ from nightwatch.storage.database import Base, create_database
 from nightwatch.tools.investigation_tools import InvestigationToolRegistry
 
 
+def test_investigator_replays_response_items_without_output_status() -> None:
+    output = [
+        {
+            "id": "fc_123",
+            "type": "function_call",
+            "status": "completed",
+            "call_id": "call_123",
+            "name": "host_get_metrics",
+            "arguments": "{}",
+        },
+        {
+            "id": "rs_123",
+            "type": "reasoning",
+            "status": "completed",
+            "summary": [],
+            "content": None,
+        },
+    ]
+
+    assert InvestigatorService._replay_output(output) == [
+        {
+            "id": "fc_123",
+            "type": "function_call",
+            "call_id": "call_123",
+            "name": "host_get_metrics",
+            "arguments": "{}",
+        },
+        {"id": "rs_123", "type": "reasoning", "summary": []},
+    ]
+
+
 @pytest.mark.anyio
 async def test_repeated_monitoring_failures_create_one_incident(tmp_path: Path) -> None:
     engine, sessions = create_database(f"sqlite+aiosqlite:///{tmp_path / 'incidents.db'}")

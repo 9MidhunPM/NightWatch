@@ -135,7 +135,7 @@ class InvestigatorService:
                 )
                 await self._finish(incident.id, outcome)
                 return
-            inputs.extend(response.get("output", []))
+            inputs.extend(self._replay_output(response.get("output", [])))
             for call in calls:
                 if _ >= self._max_tool_calls:
                     await self._incident_service.investigation_failed(
@@ -191,10 +191,34 @@ class InvestigatorService:
             max_output_tokens=1200,
             text_format=InvestigationOutcome,
         )
-        payload: dict[str, Any] = response.model_dump()
+        payload: dict[str, Any] = response.model_dump(exclude_none=True)
         if response.output_parsed is not None:
             payload["parsed_outcome"] = response.output_parsed.model_dump_json()
         return payload
+
+    @staticmethod
+    def _replay_output(output: object) -> list[dict[str, object]]:
+        """Convert response-only output items into valid follow-up input items.
+
+        The Responses API returns a top-level ``status`` on output items, but
+        rejects that field when the same items are supplied as the next input.
+        Reasoning and function-call items still need to be replayed so the model
+        can continue the tool loop with the corresponding call output.
+        """
+        if not isinstance(output, list):
+            return []
+        replay: list[dict[str, object]] = []
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            replay.append(
+                {
+                    str(key): value
+                    for key, value in item.items()
+                    if key != "status" and value is not None
+                }
+            )
+        return replay
 
     @staticmethod
     def _context(incident: IncidentResponse) -> dict[str, object]:
