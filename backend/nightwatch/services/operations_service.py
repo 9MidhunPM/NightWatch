@@ -103,7 +103,13 @@ class OperationsService:
             )
             if answer:
                 self._last_provider_success_at = datetime.now(UTC)
-                return AgentMessageResponse(answer=answer, suggested_questions=["Which containers belong to a project?", "What is unhealthy across the stack?", "Show routes and dependencies.", "Check deployment readiness."], activity=[])
+                citations = []
+                for item in self._app_server.last_evidence:
+                    try:
+                        citations.append(AgentCitation.model_validate(item))
+                    except ValueError:
+                        continue
+                return AgentMessageResponse(answer=answer, citations=citations, suggested_questions=["Explain one service end to end.", "What is unhealthy across the stack?", "Show routes and dependencies.", "Compare the last 24 hours of metrics."], activity=[])
         return await self._local_evidence_answer(question, on_event)
 
     async def _local_evidence_answer(self, question: str, on_event: Callable[[dict[str, object]], Awaitable[None]] | None) -> AgentMessageResponse:

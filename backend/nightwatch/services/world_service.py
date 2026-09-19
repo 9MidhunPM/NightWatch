@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
@@ -16,13 +17,20 @@ from nightwatch.adapters.domain_probe import probe_domain
 from nightwatch.events.bus import EventBus
 from nightwatch.events.models import EventType, RealtimeEvent
 from nightwatch.models.world import (
+    DeploymentSummary,
     DomainCheck,
+    EvidenceStatus,
+    HostMetrics,
+    ReplicaState,
+    ResourceMetrics,
     WorldConnection,
     WorldProject,
     WorldResource,
     WorldSnapshot,
 )
+from nightwatch.services.beszel_service import BeszelService
 from nightwatch.services.docker_service import DockerService
+from nightwatch.services.host_service import HostService
 from nightwatch.services.incident_service import IncidentService
 
 logger = logging.getLogger("nightwatch.world")
@@ -47,6 +55,56 @@ def aggregate_health(states: list[str]) -> str:
     return "HEALTHY"
 
 
+def aggregate_project_health(states: list[str]) -> str:
+    if not states or all(state == "UNKNOWN" for state in states):
+        return "UNKNOWN"
+    known = [state for state in states if state != "UNKNOWN"]
+    for state in ("UNHEALTHY", "DEGRADED", "CHANGING", "STOPPED"):
+        if state in known:
+            return state
+    return "DEGRADED" if len(known) != len(states) else "HEALTHY"
+
+
+_UNIT_FACTORS = {
+    "b": 1,
+    "kb": 1000,
+    "mb": 1000**2,
+    "gb": 1000**3,
+    "tb": 1000**4,
+    "kib": 1024,
+    "mib": 1024**2,
+    "gib": 1024**3,
+    "tib": 1024**4,
+}
+
+
+def parse_bytes(value: object) -> int | None:
+    if not isinstance(value, str):
+        return None
+    match = re.fullmatch(
+        r"\s*([0-9]+(?:\.[0-9]+)?)\s*([kmgt]?i?b)\s*", value, re.IGNORECASE
+    )
+    if not match:
+        return None
+    return round(float(match.group(1)) * _UNIT_FACTORS[match.group(2).lower()])
+
+
+def parse_pair(value: object) -> tuple[int | None, int | None]:
+    if not isinstance(value, str):
+        return None, None
+    parts = value.split("/", maxsplit=1)
+    return (parse_bytes(parts[0]), parse_bytes(parts[1])) if len(parts) == 2 else (None, None)
+
+
+def parse_percent(value: object) -> float | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return float(value.strip().removesuffix("%"))
+    except ValueError:
+        return None
+
+
 class WorldService:
     def __init__(
         self,
@@ -55,9 +113,12 @@ class WorldService:
         docker: DockerService,
         incidents: IncidentService,
         bus: EventBus,
+        host: HostService | None = None,
+        beszel: BeszelService | None = None,
     ) -> None:
         self.sessions, self.dokploy, self.docker = sessions, dokploy, docker
         self.incidents, self.bus = incidents, bus
+        self.host, self.beszel = host, beszel
         self.current = WorldSnapshot(
             generated_at=datetime.now(UTC), message="Discovering infrastructure"
         )
@@ -101,6 +162,31 @@ class WorldService:
                 snapshot.message = "Dokploy discovery unavailable; showing last known inventory"
             self._discovered = now
         await self.runtime(snapshot)
+        if self.host is not None:
+            try:
+                host = await self.host.get_host(publish_event=False)
+                snapshot.host_metrics = HostMetrics(
+                    cpu_percent=host.cpu_percent,
+                    memory_used_bytes=host.memory_used_bytes,
+                    memory_total_bytes=host.memory_total_bytes,
+                    memory_percent=round(host.memory_used_bytes / host.memory_total_bytes * 100, 2) if host.memory_total_bytes else None,
+                    disk_used_bytes=host.root_disk_used_bytes,
+                    disk_total_bytes=host.root_disk_total_bytes,
+                    disk_percent=round(host.root_disk_used_bytes / host.root_disk_total_bytes * 100, 2) if host.root_disk_total_bytes else None,
+                    load_1m=host.load_1m,
+                    observed_at=host.last_refreshed_at,
+                    source="host",
+                )
+                snapshot.sources["host"] = "available"
+            except Exception:  # noqa: BLE001 - optional host telemetry cannot stop world discovery
+                snapshot.sources["host"] = "unavailable"
+        if self.beszel is not None:
+            beszel_metrics = await self.beszel.host_metrics()
+            if beszel_metrics is not None:
+                snapshot.host_metrics = beszel_metrics
+                snapshot.sources["beszel"] = "available"
+            else:
+                snapshot.sources["beszel"] = "unavailable"
         if now - self._probed >= 30:
             # Each normalized URL is checked once, even if attached to multiple services.
             checks = {
@@ -122,7 +208,10 @@ class WorldService:
                     "HEALTHY" if d.state == "PROTECTED" else d.state for d in resource.domains
                 )
                 resource.health = aggregate_health(states)
-            project.health = aggregate_health([r.health for r in project.resources])
+            project.health = aggregate_project_health([r.health for r in project.resources])
+        observed = [r for p in snapshot.projects for r in p.resources if r.runtime_state != "not observed"]
+        total = sum(len(p.resources) for p in snapshot.projects)
+        snapshot.coverage = round(len(observed) / total * 100, 1) if total else 100.0
         snapshot.generated_at = datetime.now(UTC)
         snapshot.connections = self.connections(snapshot)
         async with self.sessions() as session:
@@ -184,6 +273,33 @@ class WorldService:
                 resource.name = str(data.get("name") or resource.name)
                 resource.app_name = str(data.get("appName") or "")
                 resource.deployment_state = str(data.get(f"{kind}Status") or "unknown")
+                resource.owner = str(data.get("owner")) if data.get("owner") else None
+                resource.repository = str(data.get("repository")) if data.get("repository") else None
+                resource.branch = str(data.get("branch")) if data.get("branch") else None
+                resource.build_type = str(data.get("buildType")) if data.get("buildType") else None
+                resource.build_path = str(data.get("buildPath")) if data.get("buildPath") else None
+                resource.dockerfile = str(data.get("dockerfile")) if data.get("dockerfile") else None
+                resource.image = str(data.get("dockerImage")) if data.get("dockerImage") else None
+                resource.auto_deploy = data.get("autoDeploy") if isinstance(data.get("autoDeploy"), bool) else None
+                deployments = data.get("deployments") or []
+                resource.recent_deployments = []
+                for deployment in deployments[:5] if isinstance(deployments, list) else []:
+                    if not isinstance(deployment, dict):
+                        continue
+                    description = str(deployment.get("description") or "")
+                    commit_match = re.search(
+                        r"Commit:\s*([0-9a-f]{7,40})", description, re.IGNORECASE
+                    )
+                    resource.recent_deployments.append(
+                        DeploymentSummary(
+                            id=str(deployment.get("deploymentId") or "unknown"),
+                            title=str(deployment.get("title") or "Deployment"),
+                            status=str(deployment.get("status") or "unknown"),
+                            commit=commit_match.group(1) if commit_match else None,
+                            created_at=deployment.get("createdAt"),
+                            finished_at=deployment.get("finishedAt"),
+                        )
+                    )
                 resource.observed_at = datetime.now(UTC)
                 if kind == "compose":
                     raw_compose = data.get("composeFile")
@@ -262,25 +378,49 @@ class WorldService:
         return sorted(projects, key=lambda project: project.name.casefold())
 
     async def runtime(self, snapshot: WorldSnapshot) -> None:
+        observed_at = datetime.now(UTC)
+        try:
+            swarm_services, swarm_stats = await asyncio.gather(
+                self.dokploy.swarm_services(), self.dokploy.swarm_container_stats()
+            )
+        except (DokployError, ValueError, TypeError):
+            swarm_services, swarm_stats = [], []
+            snapshot.sources["dokploy_swarm"] = "unavailable"
+        else:
+            snapshot.sources["dokploy_swarm"] = "available"
+        service_by_name = {
+            str(item.get("Name")): item
+            for item in swarm_services
+            if isinstance(item.get("Name"), str)
+        }
+        stats_by_service: dict[str, list[dict[str, object]]] = {}
+        for item in swarm_stats:
+            name = str(item.get("Name") or "")
+            service_name = name.split(".", maxsplit=1)[0] if "." in name else name
+            stats_by_service.setdefault(service_name, []).append(item)
         try:
             inventory = await self.docker.inventory(publish_event=False)
         except DockerUnavailableError:
             snapshot.sources["docker"] = "unavailable"
-            for project in snapshot.projects:
-                for resource in project.resources:
-                    resource.runtime_state, resource.health = "unknown", "UNKNOWN"
-            return
-        snapshot.sources["docker"] = "available"
+            inventory = None
+        else:
+            snapshot.sources["docker"] = "available"
         for project in snapshot.projects:
             for resource in project.resources:
+                resource.evidence = [
+                    EvidenceStatus(source="dokploy", observed_at=resource.observed_at, state="available" if resource.observed_at else "unavailable"),
+                    EvidenceStatus(source="dokploy_swarm", observed_at=observed_at if swarm_services else None, state="available" if swarm_services else "unavailable"),
+                    EvidenceStatus(source="docker", observed_at=inventory.discovered_at if inventory else None, state="available" if inventory else "unavailable"),
+                ]
                 matches = [
                     c
-                    for c in inventory.containers
+                    for c in (inventory.containers if inventory else [])
                     if resource.app_name
                     and (
                         c.compose_project == resource.app_name
                         or c.labels.get("com.docker.swarm.service.name") == resource.app_name
                         or c.name == resource.app_name
+                        or c.name.startswith(resource.app_name + ".")
                     )
                     and (
                         not resource.compose_service
@@ -289,10 +429,56 @@ class WorldService:
                 ]
                 resource.container_ids = [f"container:{c.id}" for c in matches]
                 resource.networks = sorted({n for c in matches for n in c.networks})
-                resource.runtime_state = (
-                    ", ".join(sorted({c.state for c in matches})) or "not observed"
-                )
-                if not matches:
+                swarm = service_by_name.get(resource.app_name)
+                replica_match = re.fullmatch(r"(\d+)\s*/\s*(\d+)", str(swarm.get("Replicas") or "")) if swarm else None
+                if replica_match:
+                    running, desired = int(replica_match.group(1)), int(replica_match.group(2))
+                    resource.replicas = ReplicaState(running=running, desired=desired)
+                    resource.runtime_state = f"{running}/{desired} replicas"
+                else:
+                    resource.replicas = None
+                    resource.runtime_state = ", ".join(sorted({c.state for c in matches})) or "not observed"
+                samples = list(stats_by_service.get(resource.app_name, []))
+                if resource.compose_service:
+                    compose_prefix = f"{resource.app_name}-{resource.compose_service}-"
+                    samples.extend(
+                        item
+                        for item in swarm_stats
+                        if str(item.get("Name") or "").startswith(compose_prefix)
+                    )
+                if samples:
+                    memory_pairs = [parse_pair(item.get("MemUsage")) for item in samples]
+                    network_pairs = [parse_pair(item.get("NetIO")) for item in samples]
+                    block_pairs = [parse_pair(item.get("BlockIO")) for item in samples]
+                    cpu_values = [value for item in samples if (value := parse_percent(item.get("CPUPerc"))) is not None]
+                    memory_percent_values = [value for item in samples if (value := parse_percent(item.get("MemPerc"))) is not None]
+                    resource.metrics = ResourceMetrics(
+                        cpu_percent=round(sum(cpu_values), 2) if cpu_values else None,
+                        memory_used_bytes=sum(value for value, _ in memory_pairs if value is not None),
+                        memory_limit_bytes=max((limit for _, limit in memory_pairs if limit is not None), default=None),
+                        memory_percent=round(sum(memory_percent_values), 2) if memory_percent_values else None,
+                        network_rx_bytes=sum(value for value, _ in network_pairs if value is not None),
+                        network_tx_bytes=sum(value for _, value in network_pairs if value is not None),
+                        block_read_bytes=sum(value for value, _ in block_pairs if value is not None),
+                        block_write_bytes=sum(value for _, value in block_pairs if value is not None),
+                        restart_count=sum(c.restart_count for c in matches) if matches else None,
+                        observed_at=observed_at,
+                        source="dokploy_swarm",
+                    )
+                elif matches:
+                    resource.metrics = None
+                if resource.replicas is not None:
+                    if resource.deployment_state == "running":
+                        resource.health = "CHANGING"
+                    elif resource.replicas.desired == 0:
+                        resource.health = "STOPPED"
+                    elif resource.replicas.running == 0:
+                        resource.health = "UNHEALTHY"
+                    elif resource.replicas.running < resource.replicas.desired:
+                        resource.health = "DEGRADED"
+                    else:
+                        resource.health = "HEALTHY"
+                elif not matches:
                     resource.health = (
                         "CHANGING" if resource.deployment_state == "running" else "UNKNOWN"
                     )

@@ -99,6 +99,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if active_settings.codex_api_key
                 else None,
                 timeout_seconds=active_settings.codex_app_server_timeout_seconds,
+                model=active_settings.codex_model,
             )
             if active_settings.codex_app_server_enabled
             else None
@@ -146,10 +147,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app_server_enabled=active_settings.codex_app_server_enabled,
         )
         app.state.operations_service.set_deployment(app.state.deployment_service)
+        app.state.world_service = WorldService(
+            session_factory,
+            dokploy_adapter,
+            app.state.docker_service,
+            app.state.incident_service,
+            app.state.event_bus,
+            app.state.host_service,
+            app.state.beszel_service,
+        )
+        await app.state.world_service.restore()
         tool_broker = OperationsToolBroker(
             app.state.topology_service,
             app.state.incident_service,
             app.state.deployment_service,
+            app.state.world_service,
+            dokploy_adapter,
+            app.state.beszel_service,
         )
         app.state.operations_service.set_tool_broker(tool_broker)
         app.state.conversation_service = ConversationService(
@@ -220,14 +234,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.investigator_service if active_settings.investigator_enabled else None
             ),
         )
-        app.state.world_service = WorldService(
-            session_factory,
-            dokploy_adapter,
-            app.state.docker_service,
-            app.state.incident_service,
-            app.state.event_bus,
-        )
-        await app.state.world_service.restore()
         world_task = (
             asyncio.create_task(app.state.world_service.run(), name="nightwatch-world")
             if dokploy_adapter.configured and active_settings.environment != "test"

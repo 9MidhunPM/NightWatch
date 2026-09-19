@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from nightwatch.adapters.dokploy import DokployAdapter, DokployError
 from nightwatch.models.deployment_api import DeploymentPlanRequest, InferredDeploymentRequest
+from nightwatch.services.beszel_service import BeszelService
 from nightwatch.services.deployment_service import DeploymentService
 from nightwatch.services.incident_service import IncidentService
 from nightwatch.services.topology_service import TopologyService
+from nightwatch.services.world_service import WorldService
 
 
 class OperationsToolBroker:
@@ -19,10 +22,16 @@ class OperationsToolBroker:
         topology: TopologyService,
         incidents: IncidentService,
         deployment: DeploymentService,
+        world: WorldService | None = None,
+        dokploy: DokployAdapter | None = None,
+        beszel: BeszelService | None = None,
     ) -> None:
         self._topology = topology
         self._incidents = incidents
         self._deployment = deployment
+        self._world = world
+        self._dokploy = dokploy
+        self._beszel = beszel
 
     @staticmethod
     def definitions() -> list[dict[str, object]]:
@@ -31,6 +40,37 @@ class OperationsToolBroker:
             "type": "object",
             "properties": {"project": {"type": "string", "minLength": 1, "maxLength": 120}},
             "required": ["project"],
+            "additionalProperties": False,
+        }
+        lookup = {
+            "type": "object",
+            "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 180}},
+            "required": ["query"],
+            "additionalProperties": False,
+        }
+        resource_id = {
+            "type": "object",
+            "properties": {"resource_id": {"type": "string", "minLength": 1, "maxLength": 300}},
+            "required": ["resource_id"],
+            "additionalProperties": False,
+        }
+        metrics = {
+            "type": "object",
+            "properties": {
+                "resource_id": {"type": ["string", "null"], "maxLength": 300},
+                "range": {"type": "string", "enum": ["1h", "24h", "7d", "30d"]},
+            },
+            "required": ["range"],
+            "additionalProperties": False,
+        }
+        logs = {
+            "type": "object",
+            "properties": {
+                "resource_id": {"type": "string", "minLength": 1, "maxLength": 300},
+                "tail": {"type": "integer", "minimum": 1, "maximum": 200},
+                "search": {"type": ["string", "null"], "maxLength": 120},
+            },
+            "required": ["resource_id"],
             "additionalProperties": False,
         }
         project_plan = {
@@ -76,6 +116,11 @@ class OperationsToolBroker:
             {"type": "function", "name": "nw_list_projects", "description": "List observed Dokploy/Compose projects and their containers. Use this before answering a project mapping question.", "inputSchema": empty},
             {"type": "function", "name": "nw_find_project_containers", "description": "Find containers belonging to an observed project. Use exact or partial project names; report no match rather than guessing.", "inputSchema": project},
             {"type": "function", "name": "nw_get_topology", "description": "Read a bounded infrastructure topology summary including routes and dependencies.", "inputSchema": empty},
+            {"type": "function", "name": "nw_find_resource", "description": "Find Dokploy resources by human name, app name, domain, or stable resource id. Use this before inspecting a service.", "inputSchema": lookup},
+            {"type": "function", "name": "nw_get_resource_detail", "description": "Read one resource's redacted deployment configuration, replicas, runtime health, live metrics, domains, networks, connections, and recent deployments.", "inputSchema": resource_id},
+            {"type": "function", "name": "nw_get_project_detail", "description": "Read every resource and connection in a named project from the unified evidence graph.", "inputSchema": project},
+            {"type": "function", "name": "nw_get_metrics", "description": "Read current resource or host metrics and Beszel history for a supported time range.", "inputSchema": metrics},
+            {"type": "function", "name": "nw_get_resource_logs", "description": "Read at most 200 redacted recent log lines for a resource. Use only when logs are relevant to the question.", "inputSchema": logs},
             {"type": "function", "name": "nw_get_incidents", "description": "Read current incidents and affected resources.", "inputSchema": empty},
             {"type": "function", "name": "nw_get_deployment_readiness", "description": "Validate Dokploy and GitHub repository discovery readiness without changing anything.", "inputSchema": empty},
             {"type": "function", "name": "nw_list_repositories", "description": "List repositories connected through the configured Dokploy GitHub provider. Use before preparing a deployment.", "inputSchema": empty},
@@ -100,6 +145,16 @@ class OperationsToolBroker:
         if name == "nw_get_topology":
             snapshot = await self._topology.snapshot(publish_event=False)
             return {"ok": snapshot.available, "generated_at": snapshot.generated_at.isoformat(), "resources": len(snapshot.nodes), "connections": len(snapshot.edges), "sources": snapshot.sources, "routes": [{"label": node.label, "detail": node.detail, "health": node.health} for node in snapshot.nodes if node.type in {"ROUTE", "DOMAIN"}][:50]}
+        if name == "nw_find_resource":
+            return self._find_resource(str(arguments.get("query") or ""))
+        if name == "nw_get_resource_detail":
+            return self._resource_detail(str(arguments.get("resource_id") or ""))
+        if name == "nw_get_project_detail":
+            return self._project_detail(str(arguments.get("project") or ""))
+        if name == "nw_get_metrics":
+            return await self._metrics(arguments)
+        if name == "nw_get_resource_logs":
+            return await self._logs(arguments)
         if name == "nw_get_incidents":
             incidents = await self._incidents.list_incidents()
             return {"ok": True, "incidents": [{"id": item.id, "title": item.title, "state": item.state, "severity": item.severity, "affected_resource_ids": item.affected_resource_ids} for item in incidents[:30]]}
@@ -138,6 +193,130 @@ class OperationsToolBroker:
                 return {"ok": False, "error": str(exc)}
             return {"ok": True, "plan": inferred_plan.model_dump(mode="json"), "message": "Inferred deployment plan is awaiting explicit approval; no deployment has started."}
         return {"ok": False, "error": "Unknown Nightwatch tool."}
+
+    def _find_resource(self, query: str) -> dict[str, object]:
+        if self._world is None:
+            return {"ok": False, "error": "World evidence is unavailable."}
+        needle = query.strip().casefold()
+        matches = []
+        for project in self._world.current.projects:
+            for resource in project.resources:
+                haystack = [resource.id, resource.name, resource.app_name, project.name]
+                haystack.extend(domain.url for domain in resource.domains)
+                if any(needle in value.casefold() for value in haystack):
+                    matches.append({
+                        "resource_id": resource.id,
+                        "name": resource.name,
+                        "app_name": resource.app_name,
+                        "kind": resource.kind,
+                        "project": project.name,
+                        "health": resource.health,
+                        "runtime": resource.runtime_state,
+                    })
+        return {
+            "ok": bool(matches),
+            "matches": matches[:30],
+            "evidence": self._evidence("world:resources", "world", f"Matched {len(matches)} resources."),
+            "message": None if matches else "No resource matched that identifier.",
+        }
+
+    def _resource_detail(self, resource_id: str) -> dict[str, object]:
+        if self._world is None:
+            return {"ok": False, "error": "World evidence is unavailable."}
+        for project in self._world.current.projects:
+            resource = next((item for item in project.resources if item.id == resource_id), None)
+            if resource is None:
+                continue
+            connections = [
+                item.model_dump(mode="json")
+                for item in self._world.current.connections
+                if item.source == resource.id or item.target == resource.id
+            ]
+            detail = resource.model_dump(mode="json")
+            detail["project"] = project.name
+            detail["connections"] = connections
+            return {
+                "ok": True,
+                "resource": detail,
+                "evidence": self._evidence(resource.id, "world", f"Observed {resource.name} as {resource.health} with {resource.runtime_state}."),
+            }
+        return {"ok": False, "error": "Resource was not found."}
+
+    def _project_detail(self, requested: str) -> dict[str, object]:
+        if self._world is None:
+            return {"ok": False, "error": "World evidence is unavailable."}
+        needle = requested.strip().casefold().replace(" ", "").replace("-", "")
+        project = next(
+            (
+                item for item in self._world.current.projects
+                if needle in item.name.casefold().replace(" ", "").replace("-", "")
+                or item.name.casefold().replace(" ", "").replace("-", "") in needle
+            ),
+            None,
+        )
+        if project is None:
+            return {"ok": False, "message": "No project matched that name."}
+        resource_ids = {item.id for item in project.resources}
+        return {
+            "ok": True,
+            "project": project.model_dump(mode="json"),
+            "connections": [item.model_dump(mode="json") for item in self._world.current.connections if item.source in resource_ids or item.target in resource_ids],
+            "evidence": self._evidence(f"project:{project.id}", "world", f"Observed {len(project.resources)} resources in {project.name}."),
+        }
+
+    async def _metrics(self, arguments: dict[str, object]) -> dict[str, object]:
+        range_name = str(arguments.get("range") or "24h")
+        resource_id = arguments.get("resource_id")
+        if self._world is None or self._beszel is None:
+            return {"ok": False, "error": "Telemetry evidence is unavailable."}
+        if not isinstance(resource_id, str) or not resource_id:
+            series = await self._beszel.history(range_name)
+            return {
+                "ok": series.available,
+                "current": self._world.current.host_metrics.model_dump(mode="json") if self._world.current.host_metrics else None,
+                "history": series.model_dump(mode="json"),
+                "evidence": self._evidence("host:metrics", series.source, f"Read {len(series.points)} host samples."),
+            }
+        detail = self._resource_detail(resource_id)
+        resource = detail.get("resource")
+        if not isinstance(resource, dict):
+            return detail
+        series = await self._beszel.history(range_name, container_name=str(resource.get("app_name") or ""))
+        return {
+            "ok": True,
+            "current": resource.get("metrics"),
+            "history": series.model_dump(mode="json"),
+            "evidence": self._evidence(resource_id, "dokploy_swarm+beszel", f"Read current metrics and {len(series.points)} historical samples."),
+        }
+
+    async def _logs(self, arguments: dict[str, object]) -> dict[str, object]:
+        if self._dokploy is None:
+            return {"ok": False, "error": "Dokploy log access is unavailable."}
+        resource_id = str(arguments.get("resource_id") or "")
+        parts = resource_id.split(":")
+        if len(parts) < 3 or parts[0] != "dokploy":
+            return {"ok": False, "error": "Logs require a Dokploy resource id."}
+        kind, identity = parts[1], parts[2]
+        raw_tail = arguments.get("tail")
+        tail = raw_tail if isinstance(raw_tail, int) else 100
+        try:
+            lines = await self._dokploy.service_logs(
+                kind,
+                identity,
+                tail=tail,
+                search=str(arguments["search"]) if arguments.get("search") else None,
+            )
+        except DokployError as exc:
+            return {"ok": False, "error": str(exc)}
+        return {
+            "ok": True,
+            "lines": lines,
+            "evidence": self._evidence(resource_id, "dokploy_logs", f"Read {len(lines)} redacted log lines."),
+        }
+
+    def _evidence(self, resource_id: str, source: str, summary: str) -> list[dict[str, str]]:
+        observed = self._world.current.generated_at.isoformat() if self._world else ""
+        return [{"resource_id": resource_id, "source": source, "observed_at": observed, "summary": summary}]
 
     async def _projects(self) -> dict[str, object]:
         snapshot = await self._topology.snapshot(publish_event=False)

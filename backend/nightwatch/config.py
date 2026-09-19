@@ -54,9 +54,9 @@ class Settings(BaseSettings):
         default=None, validation_alias=AliasChoices("NW_DEMO_URL", "NIGHTWATCH_DEMO_URL")
     )
     log_level: str = "INFO"
-    # The Investigator deliberately has one economical, capability-appropriate model.
-    # Never add an automatic fallback here: provider availability must be explicit.
-    codex_model: Literal["gpt-5.6-luna"] = "gpt-5.6-luna"
+    # One explicit model is used by both the operations agent and investigator.
+    # Provider availability remains visible; NightWatch never silently swaps models.
+    codex_model: Literal["gpt-6-astra", "gpt-5.6-luna"] = "gpt-6-astra"
     codex_api_key: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("OPENAI_API_KEY", "NW_CODEX_API_KEY")
     )

@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx
 
+from nightwatch.security.redaction import redact
+
 
 class DokployAdapter:
     """Read-only Dokploy project metadata; Docker remains the runtime authority."""
@@ -111,6 +113,37 @@ class DokployAdapter:
             raise DokployError("Dokploy did not return the configured application.")
         return data
 
+    async def swarm_services(self) -> list[dict[str, Any]]:
+        data = self._data(await self._async_request("GET", "/api/swarm.getNodeApps"))
+        return [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
+
+    async def swarm_container_stats(self) -> list[dict[str, Any]]:
+        data = self._data(await self._async_request("GET", "/api/swarm.getContainerStats"))
+        return [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
+
+    async def service_logs(self, kind: str, identity: str, *, tail: int = 100, search: str | None = None) -> list[str]:
+        allowed = {"application", "compose", "postgres", "mysql", "mariadb", "mongo", "redis", "libsql"}
+        if kind not in allowed:
+            raise DokployError("Unsupported service type for logs.")
+        safe_tail = max(1, min(tail, 200))
+        params: dict[str, str | int | float | bool | None] = {
+            f"{kind}Id": identity,
+            "tail": safe_tail,
+        }
+        if search:
+            params["search"] = search[:120]
+        data = self._data(await self._async_request("GET", f"/api/{kind}.readLogs", params=params))
+        if isinstance(data, str):
+            lines = data.splitlines()
+        elif isinstance(data, list):
+            lines = [str(item) for item in data]
+        elif isinstance(data, dict):
+            raw = data.get("logs") or data.get("data") or []
+            lines = raw.splitlines() if isinstance(raw, str) else [str(item) for item in raw] if isinstance(raw, list) else []
+        else:
+            lines = []
+        return [str(redact(line)) for line in lines[-safe_tail:]]
+
     async def save_application_environment(self, application_id: str, environment: str) -> None:
         await self._async_request("POST", "/api/application.saveEnvironment", json={"applicationId": application_id, "env": environment})
 
@@ -120,7 +153,7 @@ class DokployAdapter:
     async def deploy_application(self, application_id: str) -> None:
         await self._async_request("POST", "/api/application.deploy", json={"applicationId": application_id})
 
-    async def _async_request(self, method: str, path: str, *, params: dict[str, str] | None = None, json: dict[str, object] | None = None) -> object:
+    async def _async_request(self, method: str, path: str, *, params: dict[str, str | int | float | bool | None] | None = None, json: dict[str, object] | None = None) -> object:
         if not self.configured:
             raise DokployError("Dokploy URL or API key is not configured.")
         try:

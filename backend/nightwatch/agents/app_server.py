@@ -21,10 +21,11 @@ class CodexAppServer:
     backend supplies a redacted read-only evidence snapshot as turn input instead.
     """
 
-    def __init__(self, command: str, api_key: str | None, *, timeout_seconds: float, dynamic_tools: list[dict[str, object]] | None = None, tool_executor: ToolExecutor | None = None) -> None:
+    def __init__(self, command: str, api_key: str | None, *, timeout_seconds: float, model: str = "gpt-6-astra", dynamic_tools: list[dict[str, object]] | None = None, tool_executor: ToolExecutor | None = None) -> None:
         self._command = command
         self._api_key = api_key
         self._timeout_seconds = timeout_seconds
+        self._model = model
         self._process: asyncio.subprocess.Process | None = None
         self._pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
         self._next_id = 1
@@ -42,6 +43,8 @@ class CodexAppServer:
         self._event_sink: EventSink | None = None
         self._last_turn_engine: str | None = None
         self._active_conversation_id: str | None = None
+        self._turn_evidence: list[dict[str, object]] = []
+        self._last_evidence: list[dict[str, object]] = []
 
     @property
     def available(self) -> bool:
@@ -64,6 +67,10 @@ class CodexAppServer:
     @property
     def tool_count(self) -> int:
         return len(self._dynamic_tools)
+
+    @property
+    def last_evidence(self) -> list[dict[str, object]]:
+        return list(self._last_evidence)
 
     def configure_tools(self, dynamic_tools: list[dict[str, object]], tool_executor: ToolExecutor) -> None:
         if self.available:
@@ -140,6 +147,7 @@ class CodexAppServer:
                 return None
             self._thread_id = thread_id
             self._turn_parts = []
+            self._turn_evidence = []
             self._streamed_message_ids = set()
             self._event_sink = on_event
             self._active_conversation_id = conversation_id
@@ -161,6 +169,7 @@ class CodexAppServer:
                 if answer:
                     self._last_turn_engine = "codex_app_server"
                     self._turn_healthy = True
+                    self._last_evidence = list(self._turn_evidence)
                 return answer
             except (RuntimeError, TimeoutError) as exc:
                 logger.warning("Codex app-server turn failed: %s", exc)
@@ -281,8 +290,8 @@ class CodexAppServer:
                 logger.info("Codex thread resume failed for persisted conversation; starting a new scoped thread.")
         workspace = Path(os.environ.get("NW_CODEX_WORKSPACE", "/app/backend/data/codex-workspace"))
         created = await self._request("thread/start", {
-            "model": "gpt-5.6-luna", "cwd": str(workspace), "dynamicTools": self._dynamic_tools,
-            "developerInstructions": "You are Nightwatch, a careful operations agent. Use typed Nightwatch tools to establish facts before answering. Never guess project-to-container relationships. For a named project and optional blank service, inspect current projects and prepare one approval-gated action plan using those names; infer the default environment from Dokploy and do not demand repository/build details until a deployment is requested. The user must explicitly approve the exact plan in the UI before infrastructure changes. You cannot run shell commands or access Docker directly.",
+            "model": self._model, "cwd": str(workspace), "dynamicTools": self._dynamic_tools,
+            "developerInstructions": "You are NightWatch, a highly capable read-only operations agent. Use typed NightWatch tools before answering. Search for a resource, then inspect its detail, metrics, project, routes, incidents, deployments, and bounded logs when relevant. Distinguish observed facts, configured facts, inferences, and unavailable evidence. Include source names and observation times. Never guess project-to-container relationships. For a named project and optional blank service, inspect current projects and prepare one approval-gated action plan using those names; infer the default environment from Dokploy and do not demand repository/build details until a deployment is requested. The user must explicitly approve the exact plan in the UI before infrastructure changes. You cannot run shell commands or access Docker directly.",
         })
         thread = created.get("thread") if isinstance(created, dict) else None
         thread_id = thread.get("id") if isinstance(thread, dict) else None
@@ -311,6 +320,9 @@ class CodexAppServer:
             await self._event_sink({"type": "tool", "tool": tool, "status": "running", "arguments": arguments})
         try:
             output = await self._tool_executor(tool, arguments)
+            evidence = output.get("evidence")
+            if isinstance(evidence, list):
+                self._turn_evidence.extend(item for item in evidence if isinstance(item, dict))
             success = bool(output.get("ok", False))
             result = {"contentItems": [{"type": "inputText", "text": json.dumps(output, default=str)}], "success": success}
         except Exception:

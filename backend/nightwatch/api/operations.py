@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import cast
+from typing import Literal, cast
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import PlainTextResponse, StreamingResponse
@@ -19,6 +19,7 @@ from nightwatch.models.operations_api import (
 from nightwatch.services.beszel_service import BeszelService
 from nightwatch.services.conversation_service import ConversationService
 from nightwatch.services.operations_service import OperationsService
+from nightwatch.services.world_service import WorldService
 
 router = APIRouter(tags=["operations"])
 logger = logging.getLogger("nightwatch.operations_api")
@@ -105,6 +106,30 @@ async def agent_status(request: Request) -> AgentStatusResponse:
 async def beszel_status(request: Request) -> dict[str, object]:
     connection = await cast(BeszelService, request.app.state.beszel_service).connection()
     return {"configured": connection.configured, "available": connection.available, "message": connection.message, "system_id": connection.system_id}
+
+
+TelemetryRange = Literal["1h", "24h", "7d", "30d"]
+
+
+@router.get("/telemetry/host")
+async def host_telemetry(request: Request, range: TelemetryRange = "24h") -> object:
+    return await cast(BeszelService, request.app.state.beszel_service).history(range)
+
+
+@router.get("/telemetry/resource")
+async def resource_telemetry(
+    request: Request, resource_id: str, range: TelemetryRange = "24h"
+) -> object:
+    world = cast(WorldService, request.app.state.world_service).current
+    resource = next(
+        (item for project in world.projects for item in project.resources if item.id == resource_id),
+        None,
+    )
+    if resource is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource was not found.")
+    return await cast(BeszelService, request.app.state.beszel_service).history(
+        range, container_name=resource.app_name
+    )
 
 
 @router.get("/reports/current", response_model=OperationsReport)
