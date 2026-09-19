@@ -12,6 +12,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 
 from nightwatch.config import Settings, get_settings
+from nightwatch.events.bus import EventBus
+from nightwatch.security.access import RealtimeTicketRegistry, valid_frontend_token
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -25,6 +27,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=None if active_settings.environment == "production" else "/openapi.json",
     )
     app.state.settings = active_settings
+    app.state.event_bus = EventBus(active_settings.event_queue_size)
+    app.state.realtime_tickets = RealtimeTicketRegistry()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(active_settings.cors_origins),
@@ -39,6 +43,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> Response:
         request_id = request.headers.get("x-request-id") or str(uuid4())
         request.state.request_id = request_id
+        response: Response
+        requires_frontend_auth = (
+            active_settings.environment == "production" or active_settings.frontend_token is not None
+        )
+        if requires_frontend_auth and request.url.path != "/api/health":
+            expected = active_settings.frontend_token.get_secret_value() if active_settings.frontend_token else None
+            if not valid_frontend_token(request.headers.get("x-nightwatch-frontend"), expected):
+                response = error_response(
+                    request,
+                    "UNAUTHORIZED",
+                    "Frontend authorization is required.",
+                    status.HTTP_401_UNAUTHORIZED,
+                )
+                response.headers["X-Request-ID"] = request_id
+                return response
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         return response

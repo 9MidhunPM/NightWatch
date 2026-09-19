@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     )
     frontend_token: SecretStr | None = None
     operator_token: SecretStr | None = None
+    event_queue_size: int = Field(default=100, ge=1, le=10_000)
+    realtime_ticket_ttl_seconds: int = Field(default=45, ge=10, le=120)
 
     @field_validator("cors_origins", "websocket_origins", mode="before")
     @classmethod
