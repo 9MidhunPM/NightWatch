@@ -261,6 +261,7 @@ class IncidentService:
         hypotheses: list[dict[str, object]],
         confirmed_title: str | None,
         next_step: str,
+        outcome_status: str = "INSUFFICIENT_EVIDENCE",
     ) -> IncidentResponse | None:
         async with self._session_factory() as session:
             incident = await session.get(Incident, incident_id)
@@ -361,14 +362,12 @@ class IncidentService:
                     payload={"title": result_hypothesis.title, "status": result_hypothesis.status},
                 )
             )
-        terminal_event = (
-            EventType.ROOT_CAUSE_CONFIRMED
-            if response.state == "ROOT_CAUSE_CONFIRMED"
-            else EventType.INVESTIGATION_FAILED
-        )
+        terminal_event = EventType.ROOT_CAUSE_CONFIRMED if response.state == "ROOT_CAUSE_CONFIRMED" else EventType.INVESTIGATION_INCOMPLETE
         await self._event_bus.publish(
             RealtimeEvent(
-                type=terminal_event, incident_id=incident_id, payload={"summary": summary[:512]}
+                type=terminal_event,
+                incident_id=incident_id,
+                payload={"summary": summary[:512], "outcome": outcome_status},
             )
         )
         await self._event_bus.publish(

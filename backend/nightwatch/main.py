@@ -92,6 +92,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             active_settings.codex_app_server_command,
             active_settings.codex_api_key.get_secret_value() if active_settings.codex_api_key else None,
             timeout_seconds=active_settings.codex_app_server_timeout_seconds,
+            model=active_settings.codex_model,
         ) if active_settings.codex_app_server_enabled else None
         app.state.operations_service = OperationsService(
             app.state.docker_service, app.state.host_service, app.state.incident_service,
@@ -126,6 +127,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 else None
             ),
             app_server_enabled=active_settings.codex_app_server_enabled,
+            verification_attempts=active_settings.deployment_verify_attempts,
+            verification_retry_seconds=active_settings.deployment_verify_retry_seconds,
         )
         app.state.operations_service.set_deployment(app.state.deployment_service)
         tool_broker = OperationsToolBroker(
@@ -193,6 +196,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ),
         )
         await app.state.host_service.refresh(publish_event=False)
+        await app.state.deployment_service.recover_incomplete_plans()
         await app.state.remediation_service.reconcile_confirmed_plans()
         heartbeat_task = asyncio.create_task(heartbeat_loop(app), name="nightwatch-heartbeat")
         monitoring_task = (

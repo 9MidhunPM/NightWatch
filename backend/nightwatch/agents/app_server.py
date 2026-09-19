@@ -21,10 +21,11 @@ class CodexAppServer:
     backend supplies a redacted read-only evidence snapshot as turn input instead.
     """
 
-    def __init__(self, command: str, api_key: str | None, *, timeout_seconds: float, dynamic_tools: list[dict[str, object]] | None = None, tool_executor: ToolExecutor | None = None) -> None:
+    def __init__(self, command: str, api_key: str | None, *, timeout_seconds: float, model: str = "gpt-5.6-luna", dynamic_tools: list[dict[str, object]] | None = None, tool_executor: ToolExecutor | None = None) -> None:
         self._command = command
         self._api_key = api_key
         self._timeout_seconds = timeout_seconds
+        self._model = model
         self._process: asyncio.subprocess.Process | None = None
         self._pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
         self._next_id = 1
@@ -42,6 +43,7 @@ class CodexAppServer:
         self._event_sink: EventSink | None = None
         self._last_turn_engine: str | None = None
         self._active_conversation_id: str | None = None
+        self._active_thread_id: str | None = None
 
     @property
     def available(self) -> bool:
@@ -143,6 +145,7 @@ class CodexAppServer:
             self._streamed_message_ids = set()
             self._event_sink = on_event
             self._active_conversation_id = conversation_id
+            self._active_thread_id = thread_id
             self._turn_waiter = asyncio.get_running_loop().create_future()
             prompt = (
                 "Answer the user with verified operational facts. Use the relevant Nightwatch tools first, "
@@ -171,12 +174,14 @@ class CodexAppServer:
                 self._turn_waiter = None
                 self._event_sink = None
                 self._active_conversation_id = None
+                self._active_thread_id = None
 
     async def close(self) -> None:
         process, self._process = self._process, None
         self._thread_id = None
         self._thread_ids.clear()
         self._turn_healthy = False
+        self._active_thread_id = None
         if self._reader_task:
             self._reader_task.cancel()
             self._reader_task = None
@@ -227,6 +232,9 @@ class CodexAppServer:
                     continue
                 params = message.get("params")
                 if not isinstance(params, dict):
+                    continue
+                if not self._matches_active_thread(params):
+                    logger.debug("Ignoring notification for a completed or unrelated Codex thread.")
                     continue
                 if message.get("method") == "item/tool/call" and isinstance(message_id, (int, str)) and not isinstance(message_id, bool):
                     asyncio.create_task(self._handle_tool_call(message_id, params), name="nightwatch-codex-tool")
@@ -281,7 +289,7 @@ class CodexAppServer:
                 logger.info("Codex thread resume failed for persisted conversation; starting a new scoped thread.")
         workspace = Path(os.environ.get("NW_CODEX_WORKSPACE", "/app/backend/data/codex-workspace"))
         created = await self._request("thread/start", {
-            "model": "gpt-5.6-luna", "cwd": str(workspace), "dynamicTools": self._dynamic_tools,
+            "model": self._model, "cwd": str(workspace), "dynamicTools": self._dynamic_tools,
             "developerInstructions": "You are Nightwatch, a careful operations agent. Use typed Nightwatch tools to establish facts before answering. Never guess project-to-container relationships. For a named project and optional blank service, inspect current projects and prepare one approval-gated action plan using those names; infer the default environment from Dokploy and do not demand repository/build details until a deployment is requested. The user must explicitly approve the exact plan in the UI before infrastructure changes. You cannot run shell commands or access Docker directly.",
         })
         thread = created.get("thread") if isinstance(created, dict) else None
@@ -293,6 +301,10 @@ class CodexAppServer:
         return thread_id
 
     async def _handle_tool_call(self, request_id: int | str, params: dict[str, object]) -> None:
+        if not self._matches_active_thread(params):
+            result = {"contentItems": [{"type": "inputText", "text": json.dumps({"ok": False, "error": "Nightwatch turn is no longer active."})}], "success": False}
+            await self._write({"id": request_id, "result": result})
+            return
         tool = params.get("tool")
         if not isinstance(tool, str) or self._tool_executor is None:
             result = {"contentItems": [{"type": "inputText", "text": json.dumps({"ok": False, "error": "Nightwatch tool is unavailable."})}], "success": False}
@@ -320,3 +332,8 @@ class CodexAppServer:
         await self._write({"id": request_id, "result": result})
         if self._event_sink is not None:
             await self._event_sink({"type": "tool", "tool": tool, "status": "completed" if result["success"] else "failed", "duration_ms": int((asyncio.get_running_loop().time() - started) * 1000), "result": output})
+
+    def _matches_active_thread(self, params: dict[str, object]) -> bool:
+        """Reject delayed app-server notifications after their turn has ended."""
+        thread_id = params.get("threadId")
+        return not isinstance(thread_id, str) or thread_id == self._active_thread_id

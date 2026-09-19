@@ -47,6 +47,60 @@ def test_dokploy_actions_are_explicitly_approval_gated() -> None:
     assert policy.evaluate("DOKPLOY_DELETE_PROJECT", protected=False).decision == PolicyDecision.DENY
 
 
+def test_deployment_health_accepts_only_success_or_redirect_responses() -> None:
+    assert DeploymentService._is_healthy_status(200)
+    assert DeploymentService._is_healthy_status(302)
+    assert not DeploymentService._is_healthy_status(404)
+    assert not DeploymentService._is_healthy_status(503)
+
+
+class _RecoveryDeploymentService(DeploymentService):
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+        self.recovered: list[tuple[str, str, bool | str | None]] = []
+
+    async def execute(self, plan_id: str, *, resume: bool = False) -> None:
+        self.recovered.append(("execute", plan_id, resume))
+
+    async def _verify(self, plan_id: str, domain: str | None) -> None:
+        self.recovered.append(("verify", plan_id, domain))
+
+
+@pytest.mark.anyio
+async def test_restart_recovery_resumes_only_persisted_incomplete_deployments(tmp_path) -> None:
+    engine, sessions = create_database(f"sqlite+aiosqlite:///{tmp_path / 'recovery.db'}")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    try:
+        service = _RecoveryDeploymentService(
+            sessions,
+            _AmbiguousCreateDokploy(),
+            github_id="github-provider",
+            secret_catalog=None,
+            app_server_enabled=True,
+        )
+        async with sessions() as session:
+            conversation = AgentConversation(title="Restart recovery")
+            session.add(conversation)
+            await session.commit()
+            conversation_id = conversation.id
+        running = await service.create_plan(_deployment_request(port=3000, conversation_id=conversation_id))
+        verifying = await service.create_plan(_deployment_request(port=8080, conversation_id=conversation_id))
+        async with sessions() as session:
+            stored_running = await session.get(DeploymentPlan, running.id)
+            stored_verifying = await session.get(DeploymentPlan, verifying.id)
+            assert stored_running is not None and stored_verifying is not None
+            stored_running.status = "RUNNING"
+            stored_verifying.status = "VERIFYING"
+            await session.commit()
+
+        assert await service.recover_incomplete_plans() == 2
+        assert ("execute", running.id, True) in service.recovered
+        assert ("verify", verifying.id, "nightwatch-test.midhunpm.in") in service.recovered
+    finally:
+        await engine.dispose()
+
+
 class _AmbiguousCreateDokploy:
     """Simulates Dokploy committing writes before returning an unusable body."""
 
