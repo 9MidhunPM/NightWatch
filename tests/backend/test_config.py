@@ -34,10 +34,9 @@ def test_optional_codex_and_demo_configuration_loads_from_environment(
     assert settings.public_demo_url == "https://demo.example.test"
 
 
-def test_configuration_rejects_non_luna_codex_model(
+def test_configuration_forces_luna_codex_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("NW_CODEX_MODEL", "unsupported-model")
 
-    with pytest.raises(ValidationError):
-        Settings()
+    assert Settings().codex_model == "gpt-5.6-luna"

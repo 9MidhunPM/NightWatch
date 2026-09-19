@@ -54,8 +54,8 @@ class Settings(BaseSettings):
         default=None, validation_alias=AliasChoices("NW_DEMO_URL", "NIGHTWATCH_DEMO_URL")
     )
     log_level: str = "INFO"
-    # Luna is the only model NightWatch may use. A different environment value
-    # fails startup rather than silently changing operational behavior.
+    # Luna is the only model NightWatch may use. Existing deployment variables
+    # cannot select a different model.
     codex_model: Literal["gpt-5.6-luna"] = "gpt-5.6-luna"
     codex_api_key: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("OPENAI_API_KEY", "NW_CODEX_API_KEY")
@@ -89,6 +89,11 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return tuple(origin.strip() for origin in value.split(",") if origin.strip())
         return value
+
+    @field_validator("codex_model", mode="before")
+    @classmethod
+    def force_luna(cls, value: object) -> str:
+        return "gpt-5.6-luna"
 
     @field_validator("database_url")
     @classmethod
