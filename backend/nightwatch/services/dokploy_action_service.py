@@ -96,10 +96,19 @@ class DokployActionService:
             record = await self._dokploy.resource_one(plan.target_kind, plan.target_id)
             if self._snapshot(record) != plan.expected_state:
                 raise ValueError("Dokploy target changed after the plan was prepared.")
-            await self._dokploy.perform_action(plan.target_kind, plan.target_id, plan.action, plan.parameters)
+            effective_action = plan.action
+            # Dokploy's start endpoint can block indefinitely when an application
+            # is idle and has no live service to resume. A deployment is the
+            # deterministic start operation in that state.
+            if plan.target_kind == "application" and plan.action == "start" and record.get("applicationStatus") in {"idle", "error"}:
+                effective_action = "deploy"
+            await self._dokploy.perform_action(plan.target_kind, plan.target_id, effective_action, plan.parameters)
             if plan.action != "delete":
                 await self._dokploy.resource_one(plan.target_kind, plan.target_id)
-            status, detail = "VERIFIED", "Dokploy accepted the action and the target was read back."
+            status = "VERIFIED"
+            detail = "Dokploy accepted the action and the target was read back."
+            if effective_action != plan.action:
+                detail = "Target was idle, so NightWatch deployed it to create the service, then read it back."
         except (DokployError, ValueError) as exc:
             status, detail = "FAILED", str(exc)
         async with self._sessions() as session:

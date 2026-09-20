@@ -215,8 +215,10 @@ class DokployAdapter:
         if not self.configured:
             raise DokployError("Dokploy URL or API key is not configured.")
         try:
-            async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
                 response = await client.request(method, f"{self._base_url}{path}", params=params, json=json, headers={"x-api-key": self._api_key or "", "accept": "application/json"})
+        except httpx.TimeoutException as exc:
+            raise DokployError(f"Dokploy timed out while calling {path}; the action may still be in progress, so refresh the target before retrying.") from exc
         except httpx.HTTPError as exc:
             raise DokployError(f"Dokploy is unavailable while calling {path}.") from exc
         if not response.is_success:
