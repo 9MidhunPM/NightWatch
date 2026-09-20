@@ -8,7 +8,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0015"
-down_revision = "0014"
+down_revision = "0014_reset_legacy_codex_threads"
 branch_labels = None
 depends_on = None
 
