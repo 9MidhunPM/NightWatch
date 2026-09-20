@@ -2,8 +2,8 @@ import {NextRequest} from 'next/server';
 import {authenticated,backendHeaders,backendURL,noStore} from '@/lib/server';
 import {originAllowed} from '@/lib/session';
 export const runtime='nodejs';export const dynamic='force-dynamic';
-const reads=[/^world$/, /^health$/, /^host(?:\/(?:metrics|capabilities))?$/, /^docker\/(?:status|containers(?:\/[\w.-]+)?|networks)$/, /^topology$/, /^incidents(?:\/[\w-]+)?$/, /^resources$/, /^agent\/(?:status|conversations(?:\/[\w-]+)?)$/, /^observability\/beszel$/, /^telemetry\/(?:host|resource)$/, /^reports\/current(?:\.csv)?$/, /^deployments\/(?:status|repositories(?:\/[\w.-]+\/[\w.-]+\/branches)?|plans|project-plans(?:\/[\w-]+)?)$/];
-const writes=[/^agent\/(?:messages|stream|conversations(?:\/[\w-]+(?:\/archive)?)?)$/, /^deployments\/plans$/, /^deployments\/(?:plans|project-plans)\/[\w-]+(?:\/(?:approval|retry))?$/, /^incidents\/[\w-]+\/investigate$/, /^incidents\/repair-plans\/[\w-]+\/approval$/, /^incidents\/repair-actions\/[\w-]+\/rollback$/];
+const reads=[/^world$/, /^health$/, /^host(?:\/(?:metrics|capabilities))?$/, /^docker\/(?:status|containers(?:\/[\w.-]+)?|networks)$/, /^topology$/, /^incidents(?:\/[\w-]+)?$/, /^resources$/, /^agent\/(?:status|conversations(?:\/[\w-]+)?)$/, /^observability\/beszel$/, /^telemetry\/(?:host|resource)$/, /^reports\/current(?:\.csv)?$/, /^deployments\/(?:status|repositories(?:\/[\w.-]+\/[\w.-]+\/branches)?|plans|project-plans(?:\/[\w-]+)?)$/, /^dokploy\/actions$/];
+const writes=[/^agent\/(?:messages|stream|conversations(?:\/[\w-]+(?:\/archive)?)?)$/, /^deployments\/plans$/, /^deployments\/(?:plans|project-plans)\/[\w-]+(?:\/(?:approval|retry))?$/, /^dokploy\/actions(?:\/[\w-]+(?:\/approval)?)?$/, /^incidents\/[\w-]+\/investigate$/, /^incidents\/repair-plans\/[\w-]+\/approval$/, /^incidents\/repair-actions\/[\w-]+\/rollback$/];
 async function proxy(req:NextRequest,{params}:{params:Promise<{path:string[]}>}){
  if(!await authenticated())return Response.json({message:'Sign in to continue'},{status:401,headers:noStore});
  const path=(await params).path.join('/');const mutation=req.method==='POST'||req.method==='DELETE';

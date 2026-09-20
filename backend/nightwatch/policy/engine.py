@@ -33,6 +33,14 @@ class PolicyEngine:
 
     def evaluate(self, action_type: str, *, protected: bool) -> PolicyResult:
         normalized = action_type.upper()
+        # Dokploy action plans are typed by the service layer.  Every one remains
+        # approval-gated; database/volume deletion is never registered there.
+        if normalized.startswith("DOKPLOY_ACTION_") and not protected:
+            return PolicyResult(
+                PolicyDecision.REQUIRE_APPROVAL,
+                "MEDIUM" if "DELETE" not in normalized else "HIGH",
+                "A human approval is required before this Dokploy operation.",
+            )
         if protected or any(token in normalized for token in self._BLOCKED):
             return PolicyResult(
                 PolicyDecision.DENY,

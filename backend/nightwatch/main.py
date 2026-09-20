@@ -24,6 +24,7 @@ from nightwatch.agents.investigator import InvestigatorService
 from nightwatch.agents.operations_tools import OperationsToolBroker
 from nightwatch.api.chaos import router as chaos_router
 from nightwatch.api.deployments import router as deployments_router
+from nightwatch.api.dokploy_actions import router as dokploy_actions_router
 from nightwatch.api.docker import router as docker_router
 from nightwatch.api.events import router as events_router
 from nightwatch.api.health import router as health_router
@@ -43,6 +44,7 @@ from nightwatch.security.access import RealtimeTicketRegistry, valid_frontend_to
 from nightwatch.services.beszel_service import BeszelService
 from nightwatch.services.conversation_service import ConversationService
 from nightwatch.services.deployment_service import DeploymentService
+from nightwatch.services.dokploy_action_service import DokployActionService
 from nightwatch.services.docker_service import DockerService
 from nightwatch.services.host_service import HostService
 from nightwatch.services.incident_service import IncidentService
@@ -147,6 +149,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app_server_enabled=active_settings.codex_app_server_enabled,
         )
         app.state.operations_service.set_deployment(app.state.deployment_service)
+        app.state.dokploy_action_service = DokployActionService(session_factory, dokploy_adapter)
         app.state.world_service = WorldService(
             session_factory,
             dokploy_adapter,
@@ -162,13 +165,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.topology_service,
             app.state.incident_service,
             app.state.deployment_service,
+            app.state.dokploy_action_service,
             app.state.world_service,
             dokploy_adapter,
             app.state.beszel_service,
         )
         app.state.operations_service.set_tool_broker(tool_broker)
         app.state.conversation_service = ConversationService(
-            session_factory, app.state.operations_service, app.state.deployment_service
+            session_factory, app.state.operations_service, app.state.deployment_service, app.state.dokploy_action_service
         )
         if app.state.codex_app_server is not None:
             app.state.codex_app_server.configure_tools(
@@ -356,6 +360,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(chaos_router, prefix="/api")
     app.include_router(operations_router, prefix="/api")
     app.include_router(deployments_router, prefix="/api")
+    app.include_router(dokploy_actions_router, prefix="/api")
     return app
 
 

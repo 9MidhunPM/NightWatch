@@ -153,7 +153,7 @@ class CodexAppServer:
                 "Before claiming a prior project or blank service is absent, call nw_get_action_context; runtime topology alone is not authoritative. "
                 "For a request to create a named Dokploy project or blank service, inspect the project inventory "
                 "and prepare one exact approval-gated action plan using the names already supplied; do not ask for "
-                "repository or port details unless the user asked to deploy code. For a follow-up to connect an existing service to a repository and domain, use nw_prepare_inferred_deployment. If the user explicitly states an application port, include it in the tool call; otherwise use repository evidence. "
+                "repository or port details unless the user asked to deploy code. For a follow-up to connect an existing service to a repository and domain, use nw_prepare_inferred_deployment. For day-to-day Dokploy work on an existing resource, call nw_find_resource then nw_prepare_dokploy_action; it creates an approval-gated, version-bound operation for start, stop, redeploy, deploy, cancel, reload, update, or permitted deletion. If the user explicitly states an application port, include it in the tool call; otherwise use repository evidence. "
                 "Do not reveal hidden reasoning, do not invent facts, and say when evidence is insufficient. "
                 "Use concise Markdown.\n\n"
                 f"Question: {question}\n\nObserved evidence:\n{evidence}"

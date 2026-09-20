@@ -17,6 +17,7 @@ from nightwatch.models.operations_api import (
     AgentMessageResponse,
 )
 from nightwatch.services.deployment_service import DeploymentService
+from nightwatch.services.dokploy_action_service import DokployActionService
 from nightwatch.services.operations_service import OperationsService
 
 EventSink = Callable[[dict[str, object]], Awaitable[None]]
@@ -25,10 +26,14 @@ EventSink = Callable[[dict[str, object]], Awaitable[None]]
 class ConversationService:
     """Durable user-visible conversation history around scoped Codex threads."""
 
-    def __init__(self, sessions: async_sessionmaker[AsyncSession], operations: OperationsService, deployment: DeploymentService) -> None:
+    def __init__(self, sessions: async_sessionmaker[AsyncSession], operations: OperationsService, deployment: DeploymentService, actions: DokployActionService) -> None:
         self._sessions = sessions
         self._operations = operations
         self._deployment = deployment
+        self._actions = actions
+
+    async def _pending_actions(self, conversation_id: str) -> list[dict[str, object]]:
+        return [*await self._deployment.pending_actions(conversation_id), *await self._actions.pending_actions(conversation_id)]
 
     async def create(self) -> AgentConversationDetail:
         async with self._sessions() as session:
@@ -52,7 +57,7 @@ class ConversationService:
                 return None
             turns = list((await session.scalars(select(AgentTurn).where(AgentTurn.conversation_id == conversation_id).order_by(AgentTurn.created_at.asc()).limit(200))).all())
             summary = self._summary(conversation)
-        return AgentConversationDetail(**summary.model_dump(), turns=[self._turn(turn) for turn in turns], pending_actions=await self._deployment.pending_actions(conversation_id))
+        return AgentConversationDetail(**summary.model_dump(), turns=[self._turn(turn) for turn in turns], pending_actions=await self._pending_actions(conversation_id))
 
     async def archive(self, conversation_id: str) -> bool:
         async with self._sessions() as session:
@@ -70,6 +75,7 @@ class ConversationService:
                 return False
             if not await self._deployment.delete_for_conversation(conversation_id, session):
                 return False
+            await self._actions.delete_for_conversation(conversation_id, session)
             await session.execute(delete(AgentTurn).where(AgentTurn.conversation_id == conversation_id))
             await session.delete(conversation)
             await session.commit()
@@ -94,7 +100,7 @@ class ConversationService:
         if prepared is None and approval is None:
             prepared = await self._prepare_project_from_message(conversation_id, message, on_event)
         reply = approval if approval is not None else prepared if prepared is not None else await self._operations.answer(message, on_event, conversation_id=conversation_id, codex_thread_id=thread_id)
-        reply.pending_actions = await self._deployment.pending_actions(conversation_id)
+        reply.pending_actions = await self._pending_actions(conversation_id)
         async with self._sessions() as session:
             conversation = await session.get(AgentConversation, conversation_id)
             if conversation is None:
@@ -117,7 +123,7 @@ class ConversationService:
     ) -> AgentMessageResponse | None:
         if not re.fullmatch(r"\s*(?:i\s+)?(?:approve|approve\s+(?:it|this|that)|yes\s*,?\s*(?:approve|deploy)|yes\s*,?\s*deploy)\s*[.!]?\s*", message, flags=re.IGNORECASE):
             return None
-        actions = await self._deployment.pending_actions(conversation_id)
+        actions = await self._pending_actions(conversation_id)
         if not actions:
             return AgentMessageResponse(answer="## No pending action\n\nThere is no version-valid Dokploy action awaiting approval in this conversation.")
         if len(actions) > 1:
@@ -130,6 +136,8 @@ class ConversationService:
         action_id, action_version, action_kind = str(action["id"]), int(str(action["version"])), str(action["kind"])
         if on_event:
             await on_event({"type": "tool", "tool": "nightwatch_approve_pending_action", "status": "running", "arguments": {"kind": action_kind, "plan_id": action_id, "version": action_version}})
+        if action_kind == "ACTION":
+            return AgentMessageResponse(answer="## Review required\n\nApprove this Dokploy operation from its action card. Deletions require typing the exact target name there.")
         if action_kind == "PROJECT":
             project_result = await self._deployment.approve_project_plan(action_id, action_version, "APPROVED", conversation_id)
             accepted = project_result is not None

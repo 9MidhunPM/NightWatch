@@ -109,3 +109,25 @@ class DeploymentStatusResponse(BaseModel):
     repository_count: int | None = None
     last_checked_at: datetime | None = None
     diagnostic_code: str | None = None
+
+
+DokployActionType = Literal[
+    "start", "stop", "redeploy", "deploy", "cancel_deployment", "reload", "update", "delete",
+    "domain_toggle", "domain_update", "backup_run", "backup_update", "backup_delete",
+]
+
+
+class DokployActionRequest(BaseModel):
+    action: DokployActionType
+    target_kind: Literal["application", "compose", "postgres", "mysql", "mariadb", "mongo", "redis", "domain", "backup", "project", "environment"]
+    target_id: str = Field(min_length=1, max_length=160)
+    target_name: str = Field(min_length=1, max_length=160)
+    project_name: str | None = Field(default=None, max_length=120)
+    parameters: dict[str, object] = Field(default_factory=dict)
+    conversation_id: str | None = Field(default=None, min_length=1, max_length=36)
+
+
+class DokployActionApprovalRequest(BaseModel):
+    version: int = Field(ge=1)
+    decision: Literal["APPROVED", "REJECTED"]
+    confirmation: str | None = Field(default=None, max_length=160)

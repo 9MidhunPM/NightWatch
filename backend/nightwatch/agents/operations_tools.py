@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from nightwatch.adapters.dokploy import DokployAdapter, DokployError
-from nightwatch.models.deployment_api import DeploymentPlanRequest, InferredDeploymentRequest
+from nightwatch.models.deployment_api import DeploymentPlanRequest, InferredDeploymentRequest, DokployActionRequest
+from nightwatch.services.dokploy_action_service import DokployActionService
 from nightwatch.services.beszel_service import BeszelService
 from nightwatch.services.deployment_service import DeploymentService
 from nightwatch.services.incident_service import IncidentService
@@ -22,6 +23,7 @@ class OperationsToolBroker:
         topology: TopologyService,
         incidents: IncidentService,
         deployment: DeploymentService,
+        actions: DokployActionService,
         world: WorldService | None = None,
         dokploy: DokployAdapter | None = None,
         beszel: BeszelService | None = None,
@@ -29,6 +31,7 @@ class OperationsToolBroker:
         self._topology = topology
         self._incidents = incidents
         self._deployment = deployment
+        self._actions = actions
         self._world = world
         self._dokploy = dokploy
         self._beszel = beszel
@@ -112,6 +115,13 @@ class OperationsToolBroker:
             "required": ["owner", "repository", "project_name", "service_name", "domain"],
             "additionalProperties": False,
         }
+        dokploy_action = {
+            "type": "object", "properties": {
+                "resource_id": {"type": "string", "minLength": 1, "maxLength": 300},
+                "action": {"type": "string", "enum": ["start", "stop", "redeploy", "deploy", "cancel_deployment", "reload", "update", "delete", "domain_toggle", "domain_update"]},
+                "parameters": {"type": "object"},
+            }, "required": ["resource_id", "action"], "additionalProperties": False,
+        }
         return [
             {"type": "function", "name": "nw_list_projects", "description": "List observed Dokploy/Compose projects and their containers. Use this before answering a project mapping question.", "inputSchema": empty},
             {"type": "function", "name": "nw_find_project_containers", "description": "Find containers belonging to an observed project. Use exact or partial project names; report no match rather than guessing.", "inputSchema": project},
@@ -128,6 +138,7 @@ class OperationsToolBroker:
             {"type": "function", "name": "nw_prepare_project", "description": "Create a persisted approval-gated plan for a Dokploy project and, when requested, a blank application service. Inspect available project facts first; repository details are not needed for a blank service. It never changes Dokploy until the operator approves the exact plan in Nightwatch.", "inputSchema": project_plan},
             {"type": "function", "name": "nw_prepare_deployment", "description": "Create a persisted, approval-gated Dokploy deployment plan. This writes only the plan; it never creates or deploys a Dokploy project until the operator explicitly approves it in Nightwatch.", "inputSchema": deployment},
             {"type": "function", "name": "nw_prepare_inferred_deployment", "description": "Inspect an existing Dokploy service and connected repository, infer safe build settings, then prepare one exact approval-gated deployment plan. If the user explicitly gives an application port, pass port and it overrides repository inference.", "inputSchema": inferred_deployment},
+            {"type": "function", "name": "nw_prepare_dokploy_action", "description": "Prepare a version-bound, approval-gated Dokploy action for an existing resource: start, stop, redeploy, deploy, cancel, update, or permitted deletion. Always use nw_find_resource first and pass its stable resource_id. Nothing changes until the operator approves the exact action in Nightwatch.", "inputSchema": dokploy_action},
         ]
 
     async def execute(self, name: str, arguments: object) -> dict[str, object]:
@@ -192,6 +203,26 @@ class OperationsToolBroker:
             except ValueError as exc:
                 return {"ok": False, "error": str(exc)}
             return {"ok": True, "plan": inferred_plan.model_dump(mode="json"), "message": "Inferred deployment plan is awaiting explicit approval; no deployment has started."}
+        if name == "nw_prepare_dokploy_action":
+            resource_id, action = str(arguments.get("resource_id") or ""), str(arguments.get("action") or "")
+            detail = self._resource_detail(resource_id)
+            resource = detail.get("resource")
+            if not isinstance(resource, dict):
+                return {"ok": False, "error": "Find and inspect a current Dokploy resource before preparing an operation."}
+            kind = str(resource.get("kind") or "")
+            target_id = resource_id.rsplit(":", 1)[-1]
+            if kind not in {"application", "compose", "postgres", "mysql", "mariadb", "mongo", "redis"}:
+                return {"ok": False, "error": "This resource type is not yet actionable through Dokploy."}
+            try:
+                plan = await self._actions.create_plan(DokployActionRequest(
+                    action=action, target_kind=kind, target_id=target_id, target_name=str(resource.get("name") or ""),
+                    project_name=str(resource.get("project") or "") or None,
+                    parameters=arguments.get("parameters") if isinstance(arguments.get("parameters"), dict) else {},
+                    conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+                ))
+            except ValueError as exc:
+                return {"ok": False, "error": str(exc)}
+            return {"ok": True, "plan": plan, "message": "The Dokploy action is awaiting explicit approval; no infrastructure has changed."}
         return {"ok": False, "error": "Unknown Nightwatch tool."}
 
     def _find_resource(self, query: str) -> dict[str, object]:

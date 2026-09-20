@@ -10,7 +10,7 @@ from nightwatch.security.redaction import redact
 
 
 class DokployAdapter:
-    """Read-only Dokploy project metadata; Docker remains the runtime authority."""
+    """Dokploy control-plane adapter with typed, approval-gated operations."""
 
     def __init__(self, base_url: str | None, api_key: str | None) -> None:
         self._base_url = base_url.rstrip("/") if base_url else None
@@ -159,6 +159,49 @@ class DokployAdapter:
             json={"applicationId": application_id},
             allow_empty_response=True,
         )
+
+    async def resource_one(self, kind: str, identity: str) -> dict[str, Any]:
+        if kind not in {"application", "compose", "postgres", "mysql", "mariadb", "mongo", "redis", "domain", "project", "environment"}:
+            raise DokployError("Unsupported Dokploy resource type.")
+        key = "domainId" if kind == "domain" else f"{kind}Id"
+        data = self._data(await self._async_request("GET", f"/api/{kind}.one", params={key: identity}))
+        if not isinstance(data, dict):
+            raise DokployError("Dokploy did not return the requested resource.")
+        return data
+
+    async def perform_action(self, kind: str, identity: str, action: str, parameters: dict[str, object] | None = None) -> None:
+        """Perform only a known typed Dokploy operation.
+
+        The caller owns policy, approval, target readback, and stale-state checks.
+        This adapter deliberately has no generic path or arbitrary request escape hatch.
+        """
+        operation = (kind, action)
+        endpoints = {
+            **{("application", name): f"/api/application.{wire}" for name, wire in {
+                "start": "start", "stop": "stop", "redeploy": "redeploy", "deploy": "deploy",
+                "cancel_deployment": "cancelDeployment", "reload": "reload", "update": "update", "delete": "delete",
+            }.items()},
+            **{("compose", name): f"/api/compose.{wire}" for name, wire in {
+                "start": "start", "stop": "stop", "redeploy": "redeploy", "deploy": "deploy",
+                "cancel_deployment": "cancelDeployment", "update": "update", "delete": "delete",
+            }.items()},
+            **{(database, name): f"/api/{database}.{wire}" for database in ("postgres", "mysql", "mariadb", "mongo", "redis") for name, wire in {
+                "start": "start", "stop": "stop", "reload": "reload", "update": "update",
+            }.items()},
+            ("domain", "domain_toggle"): "/api/domain.toggleEnable",
+            ("domain", "domain_update"): "/api/domain.update",
+            ("domain", "delete"): "/api/domain.delete",
+            ("project", "update"): "/api/project.update",
+            ("project", "delete"): "/api/project.remove",
+            ("environment", "update"): "/api/environment.update",
+            ("environment", "delete"): "/api/environment.remove",
+        }
+        path = endpoints.get(operation)
+        if path is None:
+            raise DokployError("That Dokploy operation is not supported for this resource.")
+        key = "domainId" if kind == "domain" else f"{kind}Id"
+        payload = {key: identity, **(parameters or {})}
+        await self._async_request("POST", path, json=payload, allow_empty_response=True)
 
     async def _async_request(
         self,
