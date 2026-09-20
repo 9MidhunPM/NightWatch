@@ -261,7 +261,11 @@ class WorldService:
                             trigger={"type": "BESZEL_RESOURCE_UNHEALTHY", "health": resource.health, "project": project.name},
                             affected_resource_ids=[resource.id],
                             observation_summary=f"Beszel observed {resource.name} as {resource.health.lower()} for {count} consecutive checks.",
-                            observation_data={"health": resource.health, "runtime_state": resource.runtime_state, "observed_at": resource.observed_at},
+                            observation_data={
+                                "health": resource.health,
+                                "runtime_state": resource.runtime_state,
+                                "observed_at": resource.observed_at.isoformat() if resource.observed_at else None,
+                            },
                         )
                 elif resource.health == "HEALTHY" and self._resource_failures.pop(key, 0) >= 3:
                     await self.incidents.report_recovery(key, f"Beszel observed {resource.name} healthy again.")

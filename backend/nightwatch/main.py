@@ -24,8 +24,8 @@ from nightwatch.agents.investigator import InvestigatorService
 from nightwatch.agents.operations_tools import OperationsToolBroker
 from nightwatch.api.chaos import router as chaos_router
 from nightwatch.api.deployments import router as deployments_router
-from nightwatch.api.dokploy_actions import router as dokploy_actions_router
 from nightwatch.api.docker import router as docker_router
+from nightwatch.api.dokploy_actions import router as dokploy_actions_router
 from nightwatch.api.events import router as events_router
 from nightwatch.api.health import router as health_router
 from nightwatch.api.host import router as host_router
@@ -44,8 +44,8 @@ from nightwatch.security.access import RealtimeTicketRegistry, valid_frontend_to
 from nightwatch.services.beszel_service import BeszelService
 from nightwatch.services.conversation_service import ConversationService
 from nightwatch.services.deployment_service import DeploymentService
-from nightwatch.services.dokploy_action_service import DokployActionService
 from nightwatch.services.docker_service import DockerService
+from nightwatch.services.dokploy_action_service import DokployActionService
 from nightwatch.services.host_service import HostService
 from nightwatch.services.incident_service import IncidentService
 from nightwatch.services.monitoring_service import MonitoringService

@@ -44,7 +44,7 @@ async def approve(request: Request, plan_id: str, payload: DokployActionApproval
 
 
 @router.delete("/{plan_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
-async def remove(request: Request, plan_id: str, authorization: str | None = Header(default=None)):
+async def remove(request: Request, plan_id: str, authorization: str | None = Header(default=None)) -> Response:
     if not _approval_authorized(request, authorization) or not await service(request).delete_plan(plan_id):
         raise HTTPException(status_code=409, detail="Only terminal action plans can be deleted.")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

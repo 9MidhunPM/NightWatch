@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import ClassVar
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -15,8 +16,8 @@ from nightwatch.policy.engine import PolicyDecision, PolicyEngine
 class DokployActionService:
     """Persisted, version-bound operational changes for existing Dokploy resources."""
 
-    _database_kinds = {"postgres", "mysql", "mariadb", "mongo", "redis"}
-    _allowed = {
+    _database_kinds: ClassVar[set[str]] = {"postgres", "mysql", "mariadb", "mongo", "redis"}
+    _allowed: ClassVar[dict[str, set[str]]] = {
         "application": {"start", "stop", "redeploy", "deploy", "cancel_deployment", "reload", "update", "delete"},
         "compose": {"start", "stop", "redeploy", "deploy", "cancel_deployment", "update", "delete"},
         "postgres": {"start", "stop", "reload", "update"}, "mysql": {"start", "stop", "reload", "update"},
