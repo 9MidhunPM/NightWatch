@@ -1,129 +1,175 @@
-<div align="center">
-
 # NightWatch
 
-### See more. Keep it running.
+## Overview
 
-**An infrastructure world with an operational memory.**
+NightWatch is an **agentic infrastructure operations console** that turns natural-language intent into observable, reviewable, and approval-bound infrastructure work.
 
-Explore services in 3D. Trace the evidence behind their health. Turn intent into reviewed infrastructure changes.
+Instead of making an operator jump between a deployment panel, container monitor, domain checker, logs, and an AI chat window, NightWatch builds one live model of the environment. Its agent can inspect that model through typed tools, explain what it finds, prepare deployment or Dokploy operation plans, wait for human approval, execute the accepted change, and preserve the outcome as operational history.
 
-[Architecture](docs/architecture.md) · [Engineering story](docs/engineering.md) · [Setup & deployment](docs/operations.md) · [API & workflows](docs/reference.md)
+The experience is presented through an interactive 3D infrastructure world, a practical 2D view, live telemetry, evidence-rich incidents, persistent agent conversations, deployment workflows, and operational reports.
 
-</div>
+**Live application:** [https://nightwatch.midhunpm.in](https://nightwatch.midhunpm.in)
 
----
+[Architecture](docs/architecture.md) · [Engineering story](docs/engineering.md) · [Setup and deployment](docs/operations.md) · [API and workflows](docs/reference.md)
+
+## Problem Statement
+
+Infrastructure operations are fragmented across tools that each know only part of the truth:
+
+* Dokploy knows what was configured, but a configured service is not necessarily running or reachable.
+* Docker knows about containers, but container names and replicas do not always map cleanly back to projects.
+* Beszel knows about telemetry, but its runtime records need to be reconciled with deployment identities.
+* A domain probe knows whether a public route responds, but not why it failed or which change created it.
+* A conventional chatbot can suggest commands, but a suggestion is not a safely executed or verified operation.
+
+That fragmentation becomes expensive during incidents and deployments. Operators spend time reconstructing context, comparing timestamps, translating the same intent across several control panels, and deciding whether a reported success means “API accepted,” “container started,” or “application is healthy.”
+
+The harder problem is agentic automation. Giving a model unrestricted infrastructure access is unsafe, while limiting it to prose makes it little more than a search box. A useful infrastructure agent needs enough power to investigate and act, while preserving identity, intent, approval, target state, execution results, and failure evidence.
+
+## Solution
+
+NightWatch implements an **evidence-first agentic control plane** around Dokploy and the surrounding observability stack.
+
+The operator can ask the agent to investigate a service, inspect connections, prepare a deployment, start or stop an application, redeploy a workload, or perform another registered Dokploy operation. The model does not receive a generic shell. It receives typed application tools backed by deterministic services and policy checks.
+
+For infrastructure mutations, NightWatch converts intent into a persisted plan instead of immediately firing an API request. The plan records the target, action, parameters, version, policy reason, relevant observed state, and conversation that produced it. The operator reviews and approves that exact version. Before execution, NightWatch reads the target again and rejects stale plans when the resource no longer matches the state that was approved.
+
+This makes the workflow closer to an operations team than a chatbot:
+
+```mermaid
+sequenceDiagram
+    participant O as Operator
+    participant A as NightWatch Agent
+    participant T as Typed Tools
+    participant P as Policy and Plan Engine
+    participant D as Dokploy
+    participant E as Evidence Store
+
+    O->>A: Describe the goal in plain language
+    A->>T: Inspect projects, services, domains, telemetry, and incidents
+    T->>E: Read current evidence
+    A->>P: Prepare a typed, versioned action plan
+    P-->>O: Explain target, impact, and required approval
+    O->>P: Approve the exact plan version
+    P->>D: Re-read target and execute allowed operation
+    D-->>P: Return management-plane result
+    P->>E: Persist execution and verification evidence
+    A-->>O: Report what happened and what remains uncertain
+```
+
+The agent operates on a reconciled infrastructure world assembled from Dokploy inventory, Docker identity, Beszel telemetry, routes, and HTTP observations. Missing data remains unavailable instead of being replaced with invented metrics. Incidents store observations, evidence, hypotheses, timeline events, repair plans, approvals, actions, and verification checks as separate records, so the system can explain how it reached a conclusion.
+
+NightWatch also handles awkward real-world lifecycle behavior. For example, Dokploy's application `start` path can stall when an application is idle and has no running service to resume. NightWatch checks the target state and uses deployment as the deterministic start operation for idle or errored applications, then reads the resource back and records the substitution. The agent does not pretend that management-plane acceptance proves public application health; route and incident evidence remain separate.
+
+## Features
+
+* **Agentic operations chat** powered by `gpt-5.6-luna`, with streamed activity, persistent conversations, citations, typed tools, and reviewable pending actions.
+* **Natural language to deployment workflow** for repository, branch, Dockerfile, port, domain, project, environment, approval, execution, verification, and retry state.
+* **Everyday Dokploy operations** including registered start, stop, deploy, redeploy, reload, update, cancellation, domain, project, environment, and selected deletion workflows.
+* **Human approval gates** for infrastructure mutations, with exact plan versions and explicit policy reasons.
+* **Stale-state protection** that binds approval to a snapshot of the target and revalidates it before execution.
+* **Fail-closed action registry** that exposes operations by resource type instead of giving the model an unrestricted shell.
+* **Protected data boundaries** that do not expose database or volume deletion as agent operations and reject secrets in action parameters.
+* **Bounded incident investigator** using `gpt-5.4-mini`, structured outcomes, redacted context, a three-tool-call ceiling, output limits, and timeouts.
+* **Cost-aware separation** between continuous monitoring and model investigation; monitoring does not automatically launch an AI investigation on every observation.
+* **Live infrastructure world** with textured 3D project islands, service health, domain gateways, shared networks, and graph-derived connections.
+* **Deterministic, connection-aware layout** that keeps the world stable across refreshes and arranges projects using explicit relationships.
+* **2D infrastructure view** for dense operational reading without spatial navigation.
+* **Multi-source reconciliation** across Dokploy, Docker, Beszel, routes, and domain probes.
+* **Freshness-aware telemetry** that distinguishes fresh measurements, stale samples, unavailable evidence, degraded services, and confirmed failures.
+* **Evidence-rich incident timelines** with exact dates, triggers, affected resources, raw recorded details, hypotheses, actions, and verification checks.
+* **Realtime updates and polling fallback** so the operator can keep watching the environment while upstream systems change.
+* **Operational reports and CSV export** for the current host, container, resource, and incident view.
+* **Private operator access** with signed HTTP-only sessions, exact-origin checks, server-held integration credentials, and allowlisted frontend proxy routes.
+
+## Tech Stack
+
+* **Frontend:** Next.js 16, React 19, TypeScript, Three.js, React Three Fiber, Drei, Lucide
+* **Backend:** Python 3.12, FastAPI, Pydantic, SQLAlchemy Async, HTTPX, Uvicorn
+* **Database:** SQLite with `aiosqlite` and Alembic migrations
+* **APIs / Services:** Dokploy API, Beszel API, Docker API, Traefik-derived routes, HTTP domain probes, OpenAI API, Codex app-server
+* **Hosting / Deployment:** Separate frontend, backend, and Docker observer services on Dokploy; Dockerfiles; persistent backend volume; private service networks; GitHub Actions
+* **Other Tools:** `uv`, npm, Ruff, strict mypy, pytest, ESLint, TypeScript, Playwright MCP
+
+## Codex / OpenAI Usage
+
+AI is both part of the product and part of how NightWatch was engineered during the hackathon.
+
+### Inside NightWatch
+
+The main operator agent runs through the Codex app-server and is pinned in application code to **`gpt-5.6-luna`**. It is given a catalog of typed NightWatch tools rather than direct shell access. Those tools let it inspect infrastructure state, incidents, telemetry, conversations, deployment readiness, repositories, branches, and supported Dokploy targets. When a request requires mutation, the agent prepares the persisted plan that appears in the NightWatch UI for approval.
+
+A separate manual incident investigator uses **`gpt-5.4-mini`** through the OpenAI SDK. It receives redacted incident context, gathers fresh evidence through read-only investigation tools, and must return a structured outcome containing a summary, observations, and evidence-linked hypotheses. Its tool calls, output, and execution time are bounded. Continuous monitoring is deliberately disconnected from automatic model invocation so ordinary health checks do not silently create an uncontrolled API bill.
+
+The application layer remains authoritative. Models can select tools and synthesize evidence, but policy evaluation, action registration, secret rejection, target identity checks, plan versioning, approval, stale-state detection, persistence, and execution live in deterministic code.
+
+### During the build
+
+Codex was used as an engineering collaborator across the full build:
+
+* turning the initial idea into a frontend, control-plane, persistence, and service-boundary architecture;
+* generating and refactoring FastAPI routes, Pydantic contracts, SQLAlchemy models, Alembic migrations, Next.js components, and Three.js scene logic;
+* tracing integration mismatches between Dokploy applications, Compose services, Docker replicas, Beszel records, domains, and routes;
+* debugging real deployment failures such as invalid Dokploy request contracts, empty upstream responses, lifecycle-specific start behavior, stale Docker build layers, and backend serialization errors;
+* finding a browser-only `Intl.DateTimeFormat` crash that passed static checks but failed when a populated incident page rendered;
+* improving the 3D world from a circular scene into a deterministic relationship-aware graph while preserving camera state;
+* enforcing model selection and investigation budgets in configuration and runtime code;
+* writing tests, running lint/type/build/migration checks, reading production logs, and validating deployed behavior;
+* producing the architecture, engineering, operations, API, and hackathon documentation;
+* using Playwright MCP against the authenticated production application to capture the screenshots below.
+
+AI accelerated implementation and diagnosis, but the work still required inspecting live evidence, correcting assumptions, testing integration contracts, and separating a successful command from a verified operational outcome.
+
+## Demo
+
+### Live Demo
+
+[Launch NightWatch](https://nightwatch.midhunpm.in)
+
+NightWatch is a private single-operator console, so access requires the configured operator passphrase.
+
+### Demo / Pitch Video
+
+Demo video: **coming soon**.
+
+The recommended demo flow is: explore the 3D world, inspect a service and its telemetry, open an incident timeline, ask the agent about a Dokploy resource, prepare an operation, review its plan, approve it, and compare management-plane verification with public-route evidence.
+
+## Screenshots
+
+### Agentic infrastructure world
 
 ![NightWatch 3D infrastructure world showing live projects, domain gateways, shared networks, and health states](docs/screenshots/world-3d.png)
 
-<p align="center"><em>The live infrastructure world: thirteen projects reconciled with service health, host telemetry, domain gateways, and network relationships. Connections retain their provenance; shared-network edges are context, not invented application dependencies.</em></p>
+The live world reconciles projects, services, host telemetry, health, domain gateways, and network relationships. Connections retain provenance; shared-network membership is shown as context rather than claimed as a proven application dependency.
 
-## Product tour
-
-### Operations at a glance
+### Operations overview
 
 ![NightWatch operations overview with live services and active incidents](docs/screenshots/operations-overview.png)
 
-The overview compresses the estate into current service totals, observed replicas, source timestamps, and the incidents needing attention. It is backed by the same reconciled world model as the 3D scene, so the visual map and operational tables do not maintain competing versions of infrastructure state.
+The overview combines observed replicas, source timestamps, health states, and active incidents from the same world model used by the 3D scene.
 
-### Incidents as evidence, not notifications
+### Evidence-backed incident timeline
 
 ![NightWatch incident detail showing an exact recovery timeline, evidence, and affected resources](docs/screenshots/incident-timeline.png)
 
-This domain incident records the original HTTP 502, the later consecutive successful checks, the affected resource, and exact local timestamps. Detection, latest activity, evidence collection, and recovery remain separate facts instead of being flattened into one status badge.
+The incident view records the original HTTP 502, later successful checks, affected resource, and exact event times. Detection, evidence collection, latest activity, and recovery stay separate and inspectable.
 
-### Reviewed infrastructure changes
+### Approval-bound automation
 
 ![NightWatch deployment workflows and verified Dokploy operation plans](docs/screenshots/deployment-workflows.png)
 
-Deployment and Dokploy operations are durable workflows. Repository, branch, port, domain, target, plan version, approval policy, and execution result stay visible together. The screen also preserves an uncomfortable but essential distinction: a management operation can be verified while a public endpoint still needs investigation.
+Deployment and Dokploy operation cards preserve source, target, port, domain, plan version, policy reason, status, and execution result. A management operation can be verified while public endpoint evidence still reports a problem.
 
-## The idea
+## How to Run Locally
 
-A deployment dashboard knows what you configured. A container monitor knows what is running. A domain check knows whether the outside world can reach it. During an incident, you need all three to agree—or explain why they do not.
+Requirements: Python **3.12**, [`uv`](https://docs.astral.sh/uv/), Node.js **24**, npm, and credentials for the integrations you want to enable.
 
-NightWatch brings those perspectives into one private operations console. It combines **Dokploy inventory, Beszel telemetry, Docker identity, and HTTP observations** into an explorable infrastructure map, then connects that map to persistent incidents and an agent that can prepare operational changes for approval.
-
-Built by **Midhun P M**, the project spans a Next.js interface, a FastAPI control plane, a spatial graph renderer, asynchronous observation services, and a persisted workflow layer. The difficult part is making these systems tell a consistent story when their names, timestamps, availability, and definitions of success differ.
-
-## What you can do
-
-| Surface | What it gives the operator |
-| --- | --- |
-| **Infrastructure world** | Textured project islands, service inspection, domain routes, network relationships, and a 2D alternative. |
-| **Live observations** | Beszel-backed telemetry with source freshness, Docker-assisted container matching, and external domain checks. |
-| **Incident history** | Recorded triggers, exact event times, observations, evidence, hypotheses, repair records, and verification results. |
-| **Conversational operations** | A Luna-powered chat interface with typed tools, persistent conversations, streamed activity, and reviewable action plans. |
-| **Deployment workflows** | Repository and branch selection, Dockerfile configuration, requested ports, domain attachment, approval, execution, and retry handling. |
-| **Dokploy actions** | Supported start, stop, deploy, redeploy, update, and selected resource-management operations behind approval gates. |
-| **Reports** | Current operational summaries and CSV export. |
-
-**Scope:** NightWatch is a private, single-operator application. It is not a complete replacement for Dokploy or a claim of unrestricted autonomous administration. Available operations are explicitly registered by resource type; database and volume deletion are not exposed as agent operations.
-
-## Inside the system
-
-```mermaid
-flowchart LR
-    Operator[Operator] --> UI[Next.js console]
-    UI --> Gateway[Session-checked server routes]
-    Gateway --> API[FastAPI control plane]
-    API --> World[World reconciliation]
-    API --> Workflows[Incidents and approved plans]
-    API --> Agent[Agent tools]
-    World --> Dokploy[Dokploy inventory]
-    World --> Beszel[Beszel telemetry]
-    World --> Docker[Docker observations]
-    World --> HTTP[Domain probes]
-    Workflows --> DB[(SQLite)]
-    Agent --> Workflows
-    Workflows --> Mutations[Typed Dokploy operations]
-```
-
-The observation side assembles evidence. The workflow side persists intent and decisions. The agent uses application tools to move between them; it does not replace the application’s policy checks.
-
-## The engineering behind the interface
-
-### One service, several identities
-
-A Dokploy application ID is not a container name. Compose services introduce another naming layer, while runtime replicas and telemetry records may have different identifiers again. NightWatch reconciles these identities before associating observations with a service. Missing or stale matches remain visible as unavailable evidence instead of becoming invented metrics.
-
-### A world that remains readable as it changes
-
-The 3D map uses deterministic positioning and connection-aware relaxation. Project, domain, and network nodes share an explicit graph; edges are drawn from resolved endpoints. The flat view provides a practical alternative when spatial navigation is unnecessary. Camera behavior and layout are operational concerns: an interface that loses your position on refresh interrupts diagnosis.
-
-### From a sentence to a controlled change
-
-“Deploy this repository” implies a chain of stateful work: identify the source, select the environment, configure the build, attach routing, launch the deployment, and inspect what happened. NightWatch persists those workflows rather than treating a model response or a newly created blank service as proof of completion.
-
-Existing-resource action plans bind approval to a version and a snapshot of relevant target fields. If the target changes before execution, the action fails instead of silently applying an old decision to a new state.
-
-### Operational memory with timestamps
-
-Incidents preserve observations and timeline events separately from the summary record. The interface exposes their recorded dates, payloads, affected resources, and subsequent actions. Exact timestamps make the sequence inspectable; relative ages are supplementary navigation aids.
-
-Read the [engineering story](docs/engineering.md) for the implementation tradeoffs and the failures that shaped them.
-
-## Technology
-
-| Layer | Implementation |
-| --- | --- |
-| Interface | Next.js 16, React 19, TypeScript, Lucide |
-| Spatial rendering | Three.js, React Three Fiber, Drei |
-| Control plane | Python 3.12, FastAPI, Pydantic, HTTPX |
-| Persistence | SQLite, SQLAlchemy async, Alembic |
-| Agent integration | Codex app-server for operator chat; OpenAI SDK for bounded incident investigation |
-| Infrastructure sources | Dokploy, Beszel, Docker, Traefik-derived routes, HTTP probes |
-| Delivery | Independent Docker services, Dokploy, GitHub Actions |
-
-Operator chat is pinned in code to `gpt-5.6-luna`. Manual incident investigation uses `gpt-5.4-mini`, with a maximum of three tool calls and 1,200 output tokens per configured model response. Monitoring does not automatically launch investigations. These are application settings, not a promise about provider availability or a fixed cost per conversation.
-
-## Run it
-
-Requirements: Python **3.12**, `uv`, Node.js **24**, npm, and the integration credentials for the capabilities you want enabled.
-
-```sh
+```bash
+git clone https://github.com/9MidhunPM/NightWatch.git
+cd NightWatch
 cp .env.example .env
-# Replace the placeholder access credentials before starting.
+
+# Replace every placeholder access value before starting.
 make install
 make migrate
 make dev
@@ -131,45 +177,47 @@ make dev
 
 In a second terminal:
 
-```sh
-cd frontend
+```bash
+cd NightWatch/frontend
 cp ../.env.example .env.local
-# Use the same frontend/operator tokens as the backend.
-# Set a distinct session secret of at least 32 characters.
+
+# Keep the frontend/operator tokens consistent with the backend.
+# Use a distinct session secret with at least 32 characters.
 npm ci
 npm run dev
 ```
 
-Open `http://localhost:3000` and sign in with the configured operator passphrase. The Python app reads the root `.env`; Next.js reads environment configuration from `frontend/`. Optional sources must be configured before their live data is available.
+Open [http://localhost:3000](http://localhost:3000) and sign in with `NW_DASHBOARD_PASSPHRASE`.
 
-For service boundaries, persistence, health checks, and deployment troubleshooting, use the [operations guide](docs/operations.md). The root Compose file is a **backend-only definition**, not a one-command deployment of the entire stack.
+The backend reads the repository-root `.env`; Next.js reads `frontend/.env.local`. Live Dokploy, Beszel, Docker, agent, and deployment features become available only when their integrations are configured. See the [operations guide](docs/operations.md) for the environment map and production service layout.
 
-## Quality and boundaries
+Run the validation suites with:
 
-GitHub Actions defines backend linting, strict typing, tests, migration validation, Compose validation, and a backend image build. The frontend workflow runs linting, type checking, tests, and a production build. Runtime behavior still needs inspection: a successful build cannot prove that a populated browser view renders or that an upstream service is reachable.
+```bash
+make check
+make test
 
-There are deliberate boundaries. SQLite persistence is not a distributed control-plane database. Shared-network membership is not proof of an application dependency. An accepted Dokploy action and target readback are not proof that the application serves healthy traffic. The [reference](docs/reference.md) explains those distinctions.
-
-## Explore the repository
-
-```text
-backend/nightwatch/
-  adapters/       External-system clients and probes
-  agents/         Chat app-server and bounded investigator
-  api/            FastAPI route groups
-  services/       Observation, reconciliation, and workflow orchestration
-  models/         Persistence and response contracts
-  policy/         Deterministic action policy
-  remediation/    Narrow repair execution and verification
-  security/       Access controls and redaction
-  events/         Realtime event delivery
-backend/migrations/   Database evolution
-frontend/app/         Console routes and authenticated server gateway
-frontend/components/  World, incidents, chat, deployments, and telemetry
-frontend/lib/         Session, HTTP, and graph-layout utilities
-tests/                Backend behavior and integration-boundary tests
-frontend/tests/       Frontend utility and graph tests
-docs/                 Architecture, engineering, operations, and API guide
+cd frontend
+npm run lint
+npm run typecheck
+npm test
+npm run build
 ```
 
-Texture provenance is recorded in [asset licenses](frontend/public/textures/ASSET_LICENSES.md). This documentation does not grant a software license; consult any license supplied with your copy before redistribution.
+## Additional Notes
+
+NightWatch is built as a private, single-operator control plane. It is not presented as a full Dokploy replacement, a distributed monitoring database, or an unrestricted autonomous administrator.
+
+Important current boundaries:
+
+* SQLite is appropriate for this private control plane but is not a horizontally distributed data store.
+* Network membership shows possible connectivity, not proven request direction or business dependency.
+* General Dokploy action verification currently means that the management API accepted the action and the target was read back; end-to-end application health remains separate evidence.
+* Login throttling is process-local, and the current private access model is not organization-wide RBAC.
+* Incident history is returned as a detailed list; pagination and dedicated detail loading are future scaling work.
+* Agent and investigation calls can incur provider costs despite the current bounds.
+* The demo video has not yet been published.
+
+Future plans include richer post-action health verification, dependency inference from observed traffic, paginated incident history, multi-operator roles, distributed session controls, deeper deployment rollback workflows, and evaluation datasets for measuring investigation quality and tool efficiency.
+
+For the harder implementation details and the failures overcome during development, read the [engineering story](docs/engineering.md). Texture provenance is documented in [asset licenses](frontend/public/textures/ASSET_LICENSES.md).
