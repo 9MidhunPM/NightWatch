@@ -660,7 +660,7 @@ class DeploymentService:
 
     def _application_configuration(self, plan: DeploymentPlan) -> dict[str, object]:
         return {
-            "sourceType": "github", "autoDeploy": False,
+            "sourceType": "github", "port": plan.port, "autoDeploy": False,
         }
 
     def _github_configuration(self, plan: DeploymentPlan) -> dict[str, object]:

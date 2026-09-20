@@ -27,7 +27,7 @@ class OperationsToolBroker:
         topology: TopologyService,
         incidents: IncidentService,
         deployment: DeploymentService,
-        actions: DokployActionService,
+        actions: DokployActionService | None = None,
         world: WorldService | None = None,
         dokploy: DokployAdapter | None = None,
         beszel: BeszelService | None = None,
@@ -208,6 +208,8 @@ class OperationsToolBroker:
                 return {"ok": False, "error": str(exc)}
             return {"ok": True, "plan": inferred_plan.model_dump(mode="json"), "message": "Inferred deployment plan is awaiting explicit approval; no deployment has started."}
         if name == "nw_prepare_dokploy_action":
+            if self._actions is None:
+                return {"ok": False, "error": "Dokploy action planning is unavailable."}
             resource_id, action = str(arguments.get("resource_id") or ""), str(arguments.get("action") or "")
             detail = self._resource_detail(resource_id)
             resource = detail.get("resource")

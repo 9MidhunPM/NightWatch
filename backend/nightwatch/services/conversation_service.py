@@ -26,14 +26,15 @@ EventSink = Callable[[dict[str, object]], Awaitable[None]]
 class ConversationService:
     """Durable user-visible conversation history around scoped Codex threads."""
 
-    def __init__(self, sessions: async_sessionmaker[AsyncSession], operations: OperationsService, deployment: DeploymentService, actions: DokployActionService) -> None:
+    def __init__(self, sessions: async_sessionmaker[AsyncSession], operations: OperationsService, deployment: DeploymentService, actions: DokployActionService | None = None) -> None:
         self._sessions = sessions
         self._operations = operations
         self._deployment = deployment
         self._actions = actions
 
     async def _pending_actions(self, conversation_id: str) -> list[dict[str, object]]:
-        return [*await self._deployment.pending_actions(conversation_id), *await self._actions.pending_actions(conversation_id)]
+        pending = await self._deployment.pending_actions(conversation_id)
+        return [*pending, *await self._actions.pending_actions(conversation_id)] if self._actions else pending
 
     async def create(self) -> AgentConversationDetail:
         async with self._sessions() as session:
@@ -75,7 +76,8 @@ class ConversationService:
                 return False
             if not await self._deployment.delete_for_conversation(conversation_id, session):
                 return False
-            await self._actions.delete_for_conversation(conversation_id, session)
+            if self._actions:
+                await self._actions.delete_for_conversation(conversation_id, session)
             await session.execute(delete(AgentTurn).where(AgentTurn.conversation_id == conversation_id))
             await session.delete(conversation)
             await session.commit()
