@@ -10,6 +10,8 @@ The experience is presented through an interactive 3D infrastructure world, a pr
 
 **Live application:** [https://nightwatch.midhunpm.in](https://nightwatch.midhunpm.in)
 
+**Narrated demo:** [Watch NightWatch investigate and operate live infrastructure](https://drive.google.com/file/d/1TDCbsb495BiY4YK6dNxIdD-WkLR4p85g/view?usp=sharing)
+
 [Architecture](docs/architecture.md) · [Engineering story](docs/engineering.md) · [Setup and deployment](docs/operations.md) · [API and workflows](docs/reference.md)
 
 ## Problem Statement
@@ -130,11 +132,23 @@ NightWatch is a private single-operator console, so access requires the configur
 
 ### Demo / Pitch Video
 
-Demo video: **coming soon**.
+[![Watch the narrated NightWatch demo](https://img.shields.io/badge/Watch_the_narrated_demo-Google_Drive-59D5A7?style=for-the-badge&logo=googledrive&logoColor=white)](https://drive.google.com/file/d/1TDCbsb495BiY4YK6dNxIdD-WkLR4p85g/view?usp=sharing)
 
-The recommended demo flow is: explore the 3D world, inspect a service and its telemetry, open an incident timeline, ask the agent about a Dokploy resource, prepare an operation, review its plan, approve it, and compare management-plane verification with public-route evidence.
+The narrated walkthrough shows the live infrastructure world and the agentic operations loop: inspect real state, correlate evidence, prepare a typed change, require approval, execute through Dokploy, and verify the outcome.
 
 ## Screenshots
+
+### One question, five evidence sources
+
+![NightWatch agent investigating a live service through Dokploy, Beszel, routes, networks, logs, and project evidence](docs/screenshots/agent-investigation.png)
+
+The operator asks one plain-language question. NightWatch identifies the exact Dokploy resource, checks its running replica, reads fresh Beszel metrics, probes the public route, inspects network membership and recent logs, then cites every source it used. Here it correctly separates a healthy `prism-web` service from a project-level degradation caused by `prism-api`, instead of collapsing both into a vague status.
+
+### From intent to a verified deployment
+
+![NightWatch agent turning a repository, Dockerfile, port, and domain request into an approval-bound deployment and verified HTTP 200 result](docs/screenshots/agent-deployment.png)
+
+A natural-language request becomes a concrete, versioned deployment plan with the repository, branch, production target, Dockerfile, port, domain, and plan ID spelled out before any mutation occurs. After approval, NightWatch executes the registered Dokploy workflow and reports the post-execution HTTPS check: HTTP 200.
 
 ### Agentic infrastructure world
 
@@ -216,7 +230,7 @@ Important current boundaries:
 * Login throttling is process-local, and the current private access model is not organization-wide RBAC.
 * Incident history is returned as a detailed list; pagination and dedicated detail loading are future scaling work.
 * Agent and investigation calls can incur provider costs despite the current bounds.
-* The demo video has not yet been published.
+* The public demo video shows a representative operator workflow; the live console remains passphrase protected because it controls real infrastructure.
 
 Future plans include richer post-action health verification, dependency inference from observed traffic, paginated incident history, multi-operator roles, distributed session controls, deeper deployment rollback workflows, and evaluation datasets for measuring investigation quality and tool efficiency.
 
