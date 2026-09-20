@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 .git-nightwatch/
+.playwright-mcp/
 .venv/
 __pycache__/
 *.py[cod]

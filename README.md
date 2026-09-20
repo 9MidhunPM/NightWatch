@@ -14,6 +14,30 @@ Explore services in 3D. Trace the evidence behind their health. Turn intent into
 
 ---
 
+![NightWatch 3D infrastructure world showing live projects, domain gateways, shared networks, and health states](docs/screenshots/world-3d.png)
+
+<p align="center"><em>The live infrastructure world: thirteen projects reconciled with service health, host telemetry, domain gateways, and network relationships. Connections retain their provenance; shared-network edges are context, not invented application dependencies.</em></p>
+
+## Product tour
+
+### Operations at a glance
+
+![NightWatch operations overview with live services and active incidents](docs/screenshots/operations-overview.png)
+
+The overview compresses the estate into current service totals, observed replicas, source timestamps, and the incidents needing attention. It is backed by the same reconciled world model as the 3D scene, so the visual map and operational tables do not maintain competing versions of infrastructure state.
+
+### Incidents as evidence, not notifications
+
+![NightWatch incident detail showing an exact recovery timeline, evidence, and affected resources](docs/screenshots/incident-timeline.png)
+
+This domain incident records the original HTTP 502, the later consecutive successful checks, the affected resource, and exact local timestamps. Detection, latest activity, evidence collection, and recovery remain separate facts instead of being flattened into one status badge.
+
+### Reviewed infrastructure changes
+
+![NightWatch deployment workflows and verified Dokploy operation plans](docs/screenshots/deployment-workflows.png)
+
+Deployment and Dokploy operations are durable workflows. Repository, branch, port, domain, target, plan version, approval policy, and execution result stay visible together. The screen also preserves an uncomfortable but essential distinction: a management operation can be verified while a public endpoint still needs investigation.
+
 ## The idea
 
 A deployment dashboard knows what you configured. A container monitor knows what is running. A domain check knows whether the outside world can reach it. During an incident, you need all three to agree—or explain why they do not.
