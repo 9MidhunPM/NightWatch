@@ -14,6 +14,18 @@ The experience is presented through an interactive 3D infrastructure world, a pr
 
 [Architecture](docs/architecture.md) · [Engineering story](docs/engineering.md) · [Setup and deployment](docs/operations.md) · [API and workflows](docs/reference.md)
 
+## Hackathon Award
+
+**Second Prize — Codex Community Hackathon Calicut**, held at TinkerSpace on 19–20 September 2026. NightWatch was recognized alongside M. Mohith's Kea (first place) and Mohammed Shaad N's Loop (third place).
+
+The event brought builders together to prototype with Codex. NightWatch is an agentic infrastructure operations console that reconciles live infrastructure evidence and turns natural-language requests into reviewable, approval-bound operations.
+
+![Codex Community Hackathon Calicut builders working at TinkerSpace](docs/hackathon/codex-hackathon-calicut-builders.jpeg)
+
+![Midhun P M's builder badge for Codex Community Hackathon Calicut](docs/hackathon/midhun-builder-badge.jpeg)
+
+![Codex Community Hackathon Calicut top three winners: M. Mohith, Midhun P M, and Mohammed Shaad N](docs/hackathon/top-three-winners.jpeg)
+
 ## Problem Statement
 
 Infrastructure operations are fragmented across tools that each know only part of the truth:
