@@ -1,0 +1,311 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-02T16:54:35Z",
+  "title": "Design System: NightWatch Public Showcase",
+  "extensions": {
+    "colorMeta": {
+      "mint": {
+        "role": "primary",
+        "displayName": "Watchlight Mint",
+        "tonalRamp": [
+          "oklch(15% 0.1156 163.9)",
+          "oklch(25% 0.1156 163.9)",
+          "oklch(35% 0.1156 163.9)",
+          "oklch(45% 0.1156 163.9)",
+          "oklch(55% 0.1156 163.9)",
+          "oklch(65% 0.1156 163.9)",
+          "oklch(80% 0.1156 163.9)",
+          "oklch(95% 0.1156 163.9)"
+        ]
+      },
+      "mint-hover": {
+        "role": "primary",
+        "displayName": "Mint Hover",
+        "tonalRamp": [
+          "oklch(15% 0.0959 163.3)",
+          "oklch(25% 0.0959 163.3)",
+          "oklch(35% 0.0959 163.3)",
+          "oklch(45% 0.0959 163.3)",
+          "oklch(55% 0.0959 163.3)",
+          "oklch(65% 0.0959 163.3)",
+          "oklch(80% 0.0959 163.3)",
+          "oklch(95% 0.0959 163.3)"
+        ]
+      },
+      "amber": {
+        "role": "secondary",
+        "displayName": "Evidence Amber",
+        "tonalRamp": [
+          "oklch(15% 0.1071 76.3)",
+          "oklch(25% 0.1071 76.3)",
+          "oklch(35% 0.1071 76.3)",
+          "oklch(45% 0.1071 76.3)",
+          "oklch(55% 0.1071 76.3)",
+          "oklch(65% 0.1071 76.3)",
+          "oklch(80% 0.1071 76.3)",
+          "oklch(95% 0.1071 76.3)"
+        ]
+      },
+      "coral": {
+        "role": "secondary",
+        "displayName": "Incident Coral",
+        "tonalRamp": [
+          "oklch(15% 0.1466 22.9)",
+          "oklch(25% 0.1466 22.9)",
+          "oklch(35% 0.1466 22.9)",
+          "oklch(45% 0.1466 22.9)",
+          "oklch(55% 0.1466 22.9)",
+          "oklch(65% 0.1466 22.9)",
+          "oklch(80% 0.1466 22.9)",
+          "oklch(95% 0.1466 22.9)"
+        ]
+      },
+      "charcoal": {
+        "role": "neutral",
+        "displayName": "Theatre Charcoal",
+        "tonalRamp": [
+          "oklch(15% 0.0124 226.1)",
+          "oklch(25% 0.0124 226.1)",
+          "oklch(35% 0.0124 226.1)",
+          "oklch(45% 0.0124 226.1)",
+          "oklch(55% 0.0124 226.1)",
+          "oklch(65% 0.0124 226.1)",
+          "oklch(80% 0.0124 226.1)",
+          "oklch(95% 0.0124 226.1)"
+        ]
+      },
+      "silver-text": {
+        "role": "neutral",
+        "displayName": "Silver Text",
+        "tonalRamp": [
+          "oklch(15% 0.0069 174.4)",
+          "oklch(25% 0.0069 174.4)",
+          "oklch(35% 0.0069 174.4)",
+          "oklch(45% 0.0069 174.4)",
+          "oklch(55% 0.0069 174.4)",
+          "oklch(65% 0.0069 174.4)",
+          "oklch(80% 0.0069 174.4)",
+          "oklch(95% 0.0069 174.4)"
+        ]
+      },
+      "muted-text": {
+        "role": "neutral",
+        "displayName": "Muted Text",
+        "tonalRamp": [
+          "oklch(15% 0.0168 187.2)",
+          "oklch(25% 0.0168 187.2)",
+          "oklch(35% 0.0168 187.2)",
+          "oklch(45% 0.0168 187.2)",
+          "oklch(55% 0.0168 187.2)",
+          "oklch(65% 0.0168 187.2)",
+          "oklch(80% 0.0168 187.2)",
+          "oklch(95% 0.0168 187.2)"
+        ]
+      },
+      "divider": {
+        "role": "neutral",
+        "displayName": "Measured Divider",
+        "tonalRamp": [
+          "oklch(15% 0.0238 212.8)",
+          "oklch(25% 0.0238 212.8)",
+          "oklch(35% 0.0238 212.8)",
+          "oklch(45% 0.0238 212.8)",
+          "oklch(55% 0.0238 212.8)",
+          "oklch(65% 0.0238 212.8)",
+          "oklch(80% 0.0238 212.8)",
+          "oklch(95% 0.0238 212.8)"
+        ]
+      },
+      "action-ink": {
+        "role": "neutral",
+        "displayName": "Action Ink",
+        "tonalRamp": [
+          "oklch(15% 0.0360 164.6)",
+          "oklch(25% 0.0360 164.6)",
+          "oklch(35% 0.0360 164.6)",
+          "oklch(45% 0.0360 164.6)",
+          "oklch(55% 0.0360 164.6)",
+          "oklch(65% 0.0360 164.6)",
+          "oklch(80% 0.0360 164.6)",
+          "oklch(95% 0.0360 164.6)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Large public statements with closely spaced letterforms."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Balanced section headings."
+      },
+      "title": {
+        "displayName": "Capability title",
+        "purpose": "Selected product explanation."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Compact product and engineering explanations."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Navigation, tabs, and controls; weight varies by role."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "control-response",
+        "value": "200ms ease",
+        "purpose": "Observed background, transform, navigation-color, and disclosure-icon transitions."
+      },
+      {
+        "name": "button-lift",
+        "value": "translateY(-2px)",
+        "purpose": "Subtle hover feedback on public action buttons."
+      },
+      {
+        "name": "scene-crossfade",
+        "value": "800ms ease",
+        "purpose": "Replace the poster only after the scene renders."
+      },
+      {
+        "name": "scroll-scrub",
+        "value": "0.55s; ease: none",
+        "purpose": "Follow native scroll progress without replacing browser scrolling."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation: none; transition: none; scroll-behavior: auto",
+        "purpose": "Use the static poster and linear narrative when motion is reduced."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "mobile",
+        "value": "700px"
+      },
+      {
+        "name": "tablet",
+        "value": "1023px"
+      },
+      {
+        "name": "scene-desktop-min",
+        "value": "1024px"
+      },
+      {
+        "name": "compact-desktop",
+        "value": "1200px"
+      },
+      {
+        "name": "wide-desktop-min",
+        "value": "1700px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Mint emphasis for public exploration or walkthrough actions.",
+      "html": "<a class=\"ds-button-primary\" href=\"#how-it-works\">Explore NightWatch <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 5v14m-6-6 6 6 6-6\"/></svg></a>",
+      "css": ".ds-button-primary{display:inline-flex;align-items:center;justify-content:center;gap:17px;padding:14px 20px;border-radius:7px;font-family:'Manrope Variable',Arial,sans-serif;font-size:11px;font-weight:750;text-decoration:none;transition:background .2s,transform .2s;background:#76dcb0;color:#10281e;border:0}.ds-button-primary:hover{background:#9aebc5;transform:translateY(-2px)}.ds-button-primary:focus-visible{outline:2px solid #76dcb0;outline-offset:5px;}@media(prefers-reduced-motion:reduce){.ds-button-primary{transition:none}}"
+    },
+    {
+      "name": "Outline Action",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Quiet operator-entry alternative to the mint action.",
+      "html": "<a class=\"ds-button-outline\" href=\"/login\">Operator sign-in <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14m-6-6 6 6-6 6\"/></svg></a>",
+      "css": ".ds-button-outline{display:inline-flex;align-items:center;justify-content:center;gap:17px;padding:14px 20px;border-radius:7px;font-family:'Manrope Variable',Arial,sans-serif;font-size:11px;font-weight:750;text-decoration:none;transition:background .2s,transform .2s;background:transparent;border:1px solid #4a6056;color:#d9e5dd}.ds-button-outline:hover{background:#1b2b24;transform:translateY(-2px)}.ds-button-outline:focus-visible{outline:2px solid #76dcb0;outline-offset:5px;}@media(prefers-reduced-motion:reduce){.ds-button-outline{transition:none}}"
+    },
+    {
+      "name": "Operator Navigation Link",
+      "kind": "button",
+      "refersTo": "operator-link",
+      "description": "Bordered sign-in link within the public header.",
+      "html": "<a class=\"ds-operator-link\" href=\"/login\">Operator sign-in <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14m-6-6 6 6-6 6\"/></svg></a>",
+      "css": ".ds-operator-link{display:inline-flex;align-items:center;gap:10px;border:1px solid #3b504c;border-radius:7px;padding:9px 14px;font-family:'Manrope Variable',Arial,sans-serif;font-size:11px;color:#c3ceca;text-decoration:none;transition:color .2s}.ds-operator-link:hover{color:#76dcb0}.ds-operator-link:focus-visible{outline:2px solid #76dcb0;outline-offset:5px;}@media(prefers-reduced-motion:reduce){.ds-operator-link{transition:none}}"
+    },
+    {
+      "name": "Public Navigation",
+      "kind": "nav",
+      "description": "Quiet anchors with mint hover and consistent keyboard focus.",
+      "html": "<nav class=\"ds-navigation\" aria-label=\"Showcase navigation\"><a href=\"#how-it-works\">How it works</a><a href=\"#inside\">The product</a><a href=\"#build-story\">The story</a></nav>",
+      "css": ".ds-navigation{display:flex;align-items:center;gap:28px;background:#0b1215f7;font-family:'Manrope Variable',Arial,sans-serif}.ds-navigation a{font-size:11px;color:#c3ceca;text-decoration:none;transition:color .2s}.ds-navigation a:hover{color:#76dcb0}.ds-navigation a:focus-visible{outline:2px solid #76dcb0;outline-offset:5px;}@media(prefers-reduced-motion:reduce){.ds-navigation a{transition:none}}"
+    },
+    {
+      "name": "Capability Tabs",
+      "kind": "nav",
+      "description": "Selected capability labels carry a mint underline; preview includes both states.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\" aria-label=\"Capability preview\"><button role=\"tab\" aria-selected=\"true\" tabindex=\"0\">World &amp; telemetry</button><button role=\"tab\" aria-selected=\"false\" tabindex=\"-1\">Investigation &amp; incidents</button></div>",
+      "css": ".ds-tabs{display:flex;gap:30px;border-bottom:1px solid #34464a;overflow:auto;font-family:'Manrope Variable',Arial,sans-serif}.ds-tabs button{position:relative;display:flex;align-items:center;gap:15px;color:#b0c0bd;font-family:inherit;font-size:11px;white-space:nowrap;padding:15px 0 18px;background:none;border:0;cursor:pointer}.ds-tabs button:hover{color:#b0c0bd}.ds-tabs button[aria-selected=true],.ds-tabs button[aria-selected=true]:hover{color:#a0e6c3}.ds-tabs button[aria-selected=true]:after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:#76dcb0}.ds-tabs button:focus-visible{outline:2px solid #76dcb0;outline-offset:5px;}"
+    },
+    {
+      "name": "Recorded Product Frame",
+      "kind": "card",
+      "refersTo": "recorded-media",
+      "description": "A framed product image with an explicit recorded-state caption.",
+      "html": "<figure class=\"ds-recorded-media\"><div class=\"ds-window-bar\"><span></span><span></span><span></span><small>NightWatch / world</small><b>Recorded product view</b></div><img src=\"/showcase/world-3d.webp\" alt=\"Recorded NightWatch world with project islands and connections\"/><figcaption>World &amp; telemetry · Recorded screenshot, not current telemetry</figcaption></figure>",
+      "css": ".ds-recorded-media{margin:0;min-width:0;border-radius:12px;overflow:hidden;background:#0b1215;font-family:'Manrope Variable',Arial,sans-serif}.ds-window-bar{display:flex;gap:5px;align-items:center;padding:12px 14px;background:#1b2b2d}.ds-window-bar>span{height:5px;width:5px;border-radius:50%;background:#70837a}.ds-window-bar small{font-size:8px;color:#b3c5bc;margin-left:12px}.ds-window-bar b{margin-left:auto;font-size:8px;font-weight:400;color:#a0baaa}.ds-recorded-media img{display:block;width:100%;height:auto}.ds-recorded-media figcaption{font-size:9px;color:#adc0b5;padding:11px 14px}"
+    },
+    {
+      "name": "Illustrative Evidence",
+      "kind": "custom",
+      "description": "Aligned observed values keep the incident's evidence distinct from live telemetry.",
+      "html": "<div class=\"ds-evidence-group\"><dl class=\"ds-evidence\"><div><dt>Public endpoint</dt><dd>HTTP 502</dd></div><div><dt>Docker container</dt><dd>Running</dd></div><div><dt>Evidence status</dt><dd>Needs investigation</dd></div></dl><small class=\"ds-simulation\"><span></span>Illustrative evidence · observe stage</small></div>",
+      "css": ".ds-evidence-group{max-width:360px;font-family:'Manrope Variable',Arial,sans-serif}.ds-evidence{padding:14px 0;margin:0;border-top:1px solid #3a5146;border-bottom:1px solid #3a5146}.ds-evidence>div{display:flex;justify-content:space-between;gap:20px;padding:7px 0;font-size:10px}.ds-evidence dt{color:#a5bab0}.ds-evidence dd{margin:0;color:#d7e4dc;text-align:right;font-weight:600}.ds-evidence>div:first-child dd{color:#f47d7a}.ds-simulation{display:flex;gap:7px;align-items:center;margin-top:13px;font-size:9px;color:#91a99b}.ds-simulation>span{height:4px;width:4px;border-radius:50%;background:#f47d7a}"
+    },
+    {
+      "name": "Engineering Disclosure",
+      "kind": "custom",
+      "description": "A native expandable reading row with a turning plus and visible focus.",
+      "html": "<details class=\"ds-disclosure\"><summary>Plans that remember what was approved <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><path d=\"M12 5v14M5 12h14\"/></svg></summary><p>Mutation plans preserve the target, parameters, relevant observed state, and exact version.</p></details>",
+      "css": ".ds-disclosure{border-top:1px solid #34463f;border-bottom:1px solid #34463f;font-family:'Manrope Variable',Arial,sans-serif;color:#eef4f2}.ds-disclosure summary{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:21px 0;cursor:pointer;font-size:12px;font-weight:550;list-style:none}.ds-disclosure summary::-webkit-details-marker{display:none}.ds-disclosure summary:hover{color:#eef4f2}.ds-disclosure summary:focus-visible{outline:2px solid #76dcb0;outline-offset:5px;}.ds-disclosure summary svg{color:#8aad98;transition:transform .2s}.ds-disclosure[open] summary svg{transform:rotate(45deg)}.ds-disclosure p{margin:0;font-size:11px;line-height:1.95;padding:0 24px 23px 0;color:#b6c8bd}@media(prefers-reduced-motion:reduce){.ds-disclosure summary svg{transition:none}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Infrastructure Theatre",
+    "overview": "Infrastructure Theatre makes the public NightWatch showcase feel like a precise instrument surrounding a tangible world. Charcoal surfaces, mint signals, faceted rock, greenery, and silver equipment connect the interface to the infrastructure it describes. Spacious reading pauses balance the sculptural scene with measured, evidence-oriented panels.\n\nThis system applies to the public root showcase only. The private operator console and login retain their incumbent typography, controls, and density. Within the showcase, simulation labels, recorded-media captions, visible focus, and a complete linear fallback are part of the visual contract.",
+    "keyCharacteristics": [
+      "Sculptural infrastructure with precise, quiet interface framing.",
+      "One variable sans-serif family with a large, closely spaced display tier.",
+      "Mint continuity, contextual amber and coral, and layered charcoal surfaces.",
+      "Native scrolling, restrained state transitions, and readable static fallbacks."
+    ],
+    "rules": [
+      {
+        "name": "The Mint Thread Rule",
+        "body": "Mint connects identity, primary actions, selected tabs, keyboard focus, and healthy or verified story cues. Amber and coral add contextual signals, including investigation, failure, and award evidence, without replacing the primary accent.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Family Rule",
+        "body": "Use Manrope Variable throughout the public showcase. Establish hierarchy through size, weight, spacing, and line height rather than introducing another typeface.",
+        "section": "typography"
+      },
+      {
+        "name": "The Grounded Depth Rule",
+        "body": "Let the diorama carry sculptural depth. Reading surfaces use tonal separation and thin borders; their default treatment does not add box shadows.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep these rules scoped to the public showcase.",
+      "Do preserve mint across identity, actions, selection, and visible keyboard focus.",
+      "Do keep reading columns narrow beside larger media regions and retain generous section spacing.",
+      "Do identify illustrative scene evidence and recorded product images in visible text.",
+      "Do preserve full result graphics and badge imagery with contain fitting where cropping would remove evidence.",
+      "Do keep navigation, tabs, and disclosures usable by keyboard, and provide the linear poster-based experience for reduced motion and smaller screens."
+    ],
+    "donts": [
+      "Don't apply this showcase's display scale or spacing to the private operator console.",
+      "Don't make a successful canvas load or animation a prerequisite for reading the product narrative.",
+      "Don't present a simulated status color or recorded screenshot as current infrastructure health.",
+      "Don't add box shadows to ordinary reading panels when the existing tonal and border treatment already supplies separation.",
+      "Don't turn individual camera coordinates, material variations, or image-placement measurements into global design tokens."
+    ]
+  }
+}

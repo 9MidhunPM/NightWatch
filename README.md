@@ -10,6 +10,8 @@ The experience is presented through an interactive 3D infrastructure world, a pr
 
 **Live application:** [https://nightwatch.midhunpm.in](https://nightwatch.midhunpm.in)
 
+The public homepage introduces the product through a cinematic infrastructure world, a clearly labeled representative incident story, recorded product views, architecture, and the hackathon build. Operator tools remain behind [sign-in](https://nightwatch.midhunpm.in/login); the authenticated infrastructure world is at `/world`.
+
 **Narrated demo:** [Watch NightWatch investigate and operate live infrastructure](https://drive.google.com/file/d/1TDCbsb495BiY4YK6dNxIdD-WkLR4p85g/view?usp=sharing)
 
 [Architecture](docs/architecture.md) · [Engineering story](docs/engineering.md) · [Setup and deployment](docs/operations.md) · [API and workflows](docs/reference.md)
@@ -140,7 +142,7 @@ AI accelerated implementation and diagnosis, but the work still required inspect
 
 [Launch NightWatch](https://nightwatch.midhunpm.in)
 
-NightWatch is a private single-operator console, so access requires the configured operator passphrase.
+The showcase is public. NightWatch's single-operator console requires the configured operator passphrase and opens at `/world` after sign-in.
 
 ### Demo / Pitch Video
 
