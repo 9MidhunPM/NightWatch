@@ -1,6 +1,6 @@
 # Showcase assets
 
-[← README](../README.md) · [Public showcase](public-showcase.md) · [Design system](../DESIGN.md)
+[Documentation index](README.md) · [← README](../README.md) · [Public showcase](public-showcase.md) · [Design system](../DESIGN.md)
 
 The public showcase uses three kinds of visual evidence: recorded product screenshots, genuine hackathon material, and synthetic infrastructure artwork. Keep those distinctions in filenames, alt text, visible captions, and future updates. A recorded console image does not report current health, and an illustrative connection does not prove an application dependency.
 

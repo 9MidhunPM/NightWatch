@@ -14,7 +14,7 @@ The public homepage introduces the product through a cinematic infrastructure wo
 
 **Narrated demo:** [Watch NightWatch investigate and operate live infrastructure](https://drive.google.com/file/d/1TDCbsb495BiY4YK6dNxIdD-WkLR4p85g/view?usp=sharing)
 
-[Architecture](docs/architecture.md) · [Engineering story](docs/engineering.md) · [Setup and deployment](docs/operations.md) · [API and workflows](docs/reference.md)
+[Documentation index](docs/README.md) · [Architecture](docs/architecture.md) · [Engineering story](docs/engineering.md) · [Setup and deployment](docs/operations.md) · [API and workflows](docs/reference.md)
 
 ## Hackathon Award
 
@@ -215,7 +215,7 @@ npm ci
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and sign in with `NW_DASHBOARD_PASSPHRASE`.
+Open [http://localhost:3000](http://localhost:3000) for the public showcase. Operator sign-in is at `/login` and opens `/world` after authentication. For a frontend-only preview that needs no backend or integration credentials, follow the [frontend development guide](docs/frontend-development.md).
 
 The backend reads the repository-root `.env`; Next.js reads `frontend/.env.local`. Live Dokploy, Beszel, Docker, agent, and deployment features become available only when their integrations are configured. See the [operations guide](docs/operations.md) for the environment map and production service layout.
 
@@ -249,3 +249,5 @@ Important current boundaries:
 Future plans include richer post-action health verification, dependency inference from observed traffic, paginated incident history, multi-operator roles, distributed session controls, deeper deployment rollback workflows, and evaluation datasets for measuring investigation quality and tool efficiency.
 
 For the harder implementation details and the failures overcome during development, read the [engineering story](docs/engineering.md). Texture provenance is documented in [asset licenses](frontend/public/textures/ASSET_LICENSES.md).
+
+The [documentation index](docs/README.md) also links the public showcase, media maintenance, operator access, health-check, and frontend release guides. See [CONTRIBUTING.md](CONTRIBUTING.md) for source ownership, validation commands, and preparing focused contributions.

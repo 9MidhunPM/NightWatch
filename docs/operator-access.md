@@ -1,6 +1,6 @@
 # Operator access
 
-[← README](../README.md) · [Operations](operations.md) · [Health checks](health-checks.md)
+[Documentation index](README.md) · [← README](../README.md) · [Operations](operations.md) · [Health checks](health-checks.md)
 
 NightWatch has a public project showcase at `/` and a private, single-operator console. The showcase explains the product through an illustrative scene, a representative incident simulation, and recorded screenshots. It does not grant access to current infrastructure observations or operations.
 

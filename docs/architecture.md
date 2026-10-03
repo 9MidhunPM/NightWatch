@@ -1,6 +1,6 @@
 # Architecture
 
-[← README](../README.md) · [Operations](operations.md) · [Reference](reference.md)
+[Documentation index](README.md) · [← README](../README.md) · [Operations](operations.md) · [Reference](reference.md)
 
 NightWatch is organized around three responsibilities: **observe infrastructure, preserve evidence, and execute reviewed intent**. The renderer and chat interface are consumers of that control plane.
 

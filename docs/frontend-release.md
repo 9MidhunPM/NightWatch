@@ -1,6 +1,6 @@
 # Frontend release
 
-[Frontend development](frontend-development.md) · [Operations](operations.md) · [Health checks](health-checks.md)
+[Documentation index](README.md) · [Frontend development](frontend-development.md) · [Operations](operations.md) · [Health checks](health-checks.md)
 
 A frontend release changes the public showcase and operator interface in the existing frontend service. Keep its rollout independent of the backend, restricted Docker observer, and persistent database.
 

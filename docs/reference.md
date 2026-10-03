@@ -1,6 +1,6 @@
 # Workflows and API reference
 
-[← README](../README.md) · [Architecture](architecture.md) · [Operations](operations.md)
+[Documentation index](README.md) · [← README](../README.md) · [Architecture](architecture.md) · [Operations](operations.md)
 
 This is a guide to the implemented route groups, not a replacement for request/response schemas. Backend routes live under `/api`. See `backend/nightwatch/api/` and `backend/nightwatch/models/` for the authoritative contracts. Browser requests go through the authenticated Next.js gateway at `/api/backend/`; that gateway deliberately exposes a subset of backend operations.
 

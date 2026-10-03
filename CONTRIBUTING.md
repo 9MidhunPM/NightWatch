@@ -1,5 +1,7 @@
 # Contributing to NightWatch
 
+[Project README](README.md) · [Documentation index](docs/README.md)
+
 NightWatch has a public showcase and a private operator console backed by separate frontend, backend, and Docker observer services. Start with the [architecture](docs/architecture.md) and [operations guide](docs/operations.md) before changing a service boundary.
 
 ## Choose the relevant part of the repository

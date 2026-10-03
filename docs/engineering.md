@@ -1,6 +1,6 @@
 # Engineering the gap between intent and reality
 
-[← README](../README.md) · [Architecture](architecture.md)
+[Documentation index](README.md) · [← README](../README.md) · [Architecture](architecture.md)
 
 NightWatch’s most demanding work sits between systems that each report a different part of the truth. The implementation evolved through failures in identity matching, upstream API behavior, serialization, and browser rendering. This is the engineering story supported by the code and repository history—not a claim of benchmarked scale or flawless autonomy.
 

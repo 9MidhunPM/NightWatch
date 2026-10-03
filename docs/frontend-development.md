@@ -1,6 +1,6 @@
 # Frontend development
 
-[Operations](operations.md) · [Operator access](operator-access.md) · [Frontend release](frontend-release.md)
+[Documentation index](README.md) · [Operations](operations.md) · [Operator access](operator-access.md) · [Frontend release](frontend-release.md)
 
 The public showcase and private operator console share one Next.js application. Start with the public page when working on presentation; add backend access only when testing operator behavior.
 

@@ -1,6 +1,6 @@
 # Health checks and observed evidence
 
-[← README](../README.md) · [Operations](operations.md)
+[Documentation index](README.md) · [← README](../README.md) · [Operations](operations.md)
 
 NightWatch's HTTP checks answer different questions. A responding frontend, a reachable backend, fresh infrastructure observations, and a healthy public application are separate pieces of evidence.
 

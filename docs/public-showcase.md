@@ -1,6 +1,6 @@
 # Public showcase
 
-[← README](../README.md) · [Showcase assets](showcase-assets.md) · [Architecture](architecture.md)
+[Documentation index](README.md) · [← README](../README.md) · [Showcase assets](showcase-assets.md) · [Architecture](architecture.md)
 
 NightWatch's public root page explains the product without operator credentials. It is a cinematic showcase for builders and recruiters: a representative incident story, recorded product views, engineering details, and the Calicut hackathon build. The live operator console remains a separate, authenticated experience.
 

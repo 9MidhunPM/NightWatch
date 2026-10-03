@@ -1,6 +1,6 @@
 # Setup, deployment, and operation
 
-[← README](../README.md) · [Architecture](architecture.md) · [Reference](reference.md)
+[Documentation index](README.md) · [← README](../README.md) · [Architecture](architecture.md) · [Reference](reference.md)
 
 ## Local environment
 
